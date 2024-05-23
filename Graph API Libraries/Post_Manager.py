@@ -31,10 +31,8 @@ class PostManager:
         self.api_client = api_client
 
 
-    def get_latest_post(self, page_id: str,
-                        fields: str = "id, message, created_time, permalink_url, likes.summary(true), contents.summary(true), comments.summary(true)"
+    def get_latest_post(self, page_id: str, fields: Optional[str] = None
                         ) -> Optional[Dict[str, Any]]:
-        
         """Retrieves the latest post from the specified Facebook Page.
             It does NOT retrieves the attachments.
             Attachments are retrieved with the get_post_by_id method.
@@ -46,15 +44,18 @@ class PostManager:
             likes.summary(true), comments.summary(true)).
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing the post data if found, otherwise None.
+            Optional[Dict[str, Any]]: A dictionary containing the post data if found,
+            otherwise None.
         """
         graph = self.api_client.get_graph_api_object()
+
+        # Define default fields if none are provided
+        default_fields = "id,message,created_time,permalink_url,likes.summary(true),comments.summary(true)"
+        fields = fields or default_fields  # Use default if fields is None
+
         try:
             posts = graph.get_connections(
-                id=page_id,
-                connection_name="posts",
-                fields=fields,
-                limit=1  # Get only the latest post
+                id=page_id, connection_name="posts", fields=fields, limit=1
             )
             return posts["data"][0] if posts.get("data") else None
         except facebook.GraphAPIError as e:
@@ -62,28 +63,30 @@ class PostManager:
             return None
 
 
-    def get_latest_posts(self, page_id: str, num_posts: int = 10) -> Optional[List[Dict[str, Any]]]:
-        """Retrieves the latest posts from the specified Facebook Page
+    def get_latest_posts(
+        self, page_id: str, num_posts: int = 10, fields: Optional[str] = None
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Retrieves the latest posts from the specified Facebook Page.
             It does NOT retrieve the attachment details.
 
         Args:
             page_id (str): The ID of the page to retrieve the posts from.
             num_posts (int, optional): The number of posts to retrieve (default: 10, maximum 100).
+            fields (str, optional): A comma-separated list of fields to include in the response.
+                Defaults to None, which fetches a standard set of fields.
 
         Returns:
-            Optional[List[Dict[str, Any]]]: A list of dictionaries containing post data:
-                - id (str): The post's unique ID.
-                - message (str, optional): The text content of the post.
-                - created_time (str): The date and time the post was created.
-                - permalink_url (str): The permanent URL to the post.
-                - likes (dict): Summary of likes (total_count).
-                - comments (dict): Summary of comments (total_count).
-
-            If no posts are found or an error occurs, None is returned.
+            Optional[List[Dict[str, Any]]]: A list of dictionaries
+            containing post data,
+            or None if no posts are found or an error occurs.
         """
 
         graph = self.api_client.get_graph_api_object()
-        fields = "id,message,created_time,permalink_url,likes.summary(true),comments.summary(true)"
+
+        # Define default fields if none are provided
+        default_fields = ("id,message,created_time,permalink_url,"
+                        "likes.summary(true),comments.summary(true)")
+        fields = fields or default_fields
 
         try:
             posts = graph.get_connections(
@@ -192,5 +195,5 @@ class PostManager:
             except facebook.GraphAPIError as e:
                 print(f"Error publishing post with photo: {e.message}")
                 return None
-            
-    # ... (Other methods for publishing multi-photo and video posts will be added later)
+
+# ... (Other methods for publishing multi-photo and video posts will be added later)
