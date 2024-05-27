@@ -13,6 +13,12 @@ import os
 from typing import Dict, Any, List
 import facebook
 
+import logging
+logging.basicConfig(level=logging.DEBUG)  # Set the logging level to DEBUG
+
+
+
+
 from facebook_api_client import FacebookAPIClient
 
 class Utils:
@@ -20,6 +26,36 @@ class Utils:
 
     def __init__(self, api_client: "FacebookAPIClient") -> None:
         self.api_client = api_client
+
+
+    def search_groups_by_name(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Searches for Facebook groups by name and returns their basic information.
+
+        Args:
+            query (str): The search query (group name).
+            limit (int, optional): The maximum number of groups to return (default: 10).
+
+        Returns:
+            List[Dict[str, Any]]: A list of dictionaries containing group information (id, name, privacy), 
+                                or an empty list if no groups are found.
+        """
+        graph = self.api_client.get_graph_api_object()
+        try:
+            search_results = graph.get_object(
+                id="search",
+                q=query,
+                type="group",
+                limit=limit,
+                fields="id,name,privacy"
+            )
+            print(search_results)
+            
+            return search_results.get("data", [])  # Return empty list if no groups found
+        except facebook.GraphAPIError as e:
+            logging.error(f"Error searching for groups: {e}")  # Log the error
+            return []
+
+
 
     @staticmethod
     def get_group_info(
@@ -66,30 +102,4 @@ class Utils:
             print(f"Error retrieving page/user info: {e.message}")
             return {}
 
-
-    def get_groups_followed(
-        self, page_or_user_id: str, fields: str = "id,name,description"
-    ) -> List[Dict[str, Any]]:
-        """Retrieves basic information about the groups followed by a page or user.
-
-        Args:
-            page_or_user_id (str): The ID of the page or user.
-            fields (str, optional): Comma-separated list of fields to include (e.g., "id,name,description").
-
-        Returns:
-            List[Dict[str, Any]]: A list of dictionaries containing group information, or an empty list if none are found.
-        """
-        graph = self.api_client.get_graph_api_object()
-        try:
-            # Fetch groups followed by the page or user
-            groups_data = graph.get_connections(
-                id=page_or_user_id,
-                connection_name="groups",
-                fields=fields,
-            )
-            return groups_data["data"]  # Extract group data from the response
-
-        except facebook.GraphAPIError as e:
-            print(f"Error retrieving groups followed: {e.message}")
-            return []  # Return an empty list on error
 
