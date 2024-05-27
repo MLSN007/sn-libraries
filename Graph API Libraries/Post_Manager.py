@@ -13,8 +13,10 @@ __init__(self, api_client): Takes a FacebookAPIClient instance as input.
     publish_photo_post(self, message, photo_path): Publishes a post with a photo and text.
     publish_multi_photo_post(self, message, photo_paths): Publishes a post with multiple photos and text.
     publish_video_post(self, message, video_path): Publishes a post with a video and text.
-    publish_multi_video_post(self, message, video_paths): Publishes a post with multiple videos and text.
     delete_post(self, post_id): Deletes a specific post.
+    like_post(self, post_id): Likes a specific post. (my own or third party) (PENDING)
+    like_photo(Self, photo_if) or Like Media????????????
+
 """
 
 from typing import Dict, Optional, Any, List

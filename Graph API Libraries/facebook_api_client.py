@@ -96,31 +96,3 @@ class FacebookAPIClient:
                 access_token=self.access_token, version=self.api_version
             )
         return self._graph
-
-
-if __name__ == "__main__":
-    import os
-    import facebook
-    from facebook_api_client import FacebookAPIClient  # Make sure this import is correct
-        # Load your credentials 
-    try:
-        app_id = os.environ["FB_ES_App_id"]
-        app_secret = os.environ["FB_ES_App_secret"]
-        access_token = os.environ["FB_ES_App_token"]
-        page_id = os.environ["FB_ES_Pg_id"]
-
-        # Instantiate the FacebookAPIClient
-        fb_client = FacebookAPIClient(app_id, app_secret, access_token, page_id)
-
-        # Test 1: Get the GraphAPI object
-        graph = fb_client.get_graph_api_object()
-        assert isinstance(graph, facebook.GraphAPI), "GraphAPI object not returned"
-
-        # Test 2: Fetch Page information (optional)
-        page_info = graph.get_object(id=page_id, fields="name")
-        assert "name" in page_info, "Page name not found"
-
-        print("All tests passed!")
-
-    except KeyError:
-        print("Error: Environment variables not set. Please set them before running the tests.")
