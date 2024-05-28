@@ -99,8 +99,6 @@ class PostManager:
             print(f"Error retrieving latest posts: {e.message}")
             return None
 
-
-
     def get_post_by_id(self, post_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves a specific post by its ID, including message and media.
 
