@@ -28,7 +28,7 @@ class Utils:
         self.api_client = api_client
 
 
-    def search_groups_by_name(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_groups_by_name(self, query: str, limit: int = 1) -> List[Dict[str, Any]]:
         """Searches for Facebook groups by name and returns their basic information.
 
         Args:
