@@ -68,6 +68,8 @@ class PostManager:
             print(f"Error retrieving latest posts: {e.message}")
             return None
 
+
+
     def get_post_by_id(self, post_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves a specific post by its ID, including message and media.
 
@@ -83,6 +85,11 @@ class PostManager:
                 - likes (dict): Summary of likes (total_count).
                 - comments (dict): Summary of comments (total_count).
                 - attachments (dict, optional): Information about attached media (photos, videos).
+                
+                _____________________________________________________________
+                
+                PENDING TO GET INFORMATION ABOUT SHARES OF THE POST
+                __________________________________________________________
 
             If the post is not found or an error occurs, None is returned.
         """
@@ -113,6 +120,63 @@ class PostManager:
             print(f"Error retrieving post by ID: {e.message}")
             return None
 
+    def get_post_likes(self, post_id: str) -> List[Dict[str, Any]]:
+        """Retrieves information about users who liked a specific post, handling permission limitations.
+
+        Args:
+            post_id (str): The ID of the post.
+
+        Returns:
+            List[Dict[str, Any]]: A list of dictionaries, each containing either:
+                - "name": The name of the user who liked the post (if permission is granted).
+                - "id": The ID of the user who liked the post (if permission is granted).
+                - "unknown": True, indicating the user's information is not accessible.
+        """
+        graph = self.api_client.get_graph_api_object()
+        likes = []
+
+        try:
+            likes_response = graph.get_connections(
+                id=post_id,
+                connection_name="likes",
+                # No need for specific fields as we handle permissions below
+            )
+            likes_data = likes_response.get("data", [])
+
+            for like_data in likes_data:
+                if "name" in like_data and "id" in like_data:
+                    likes.append(like_data)  # If name and ID available, add as is
+                else:
+                    likes.append({"unknown": True})  # Add indicator for unknown user
+
+        except facebook.GraphAPIError as e:
+            print(f"Error retrieving likes for post {post_id}: {e}")
+
+        return likes
+
+
+    def get_post_shares(self, post_id: str) -> int:
+        """Retrieves the number of shares for a specific post.
+
+        Args:
+            post_id (str): The ID of the post.
+
+        Returns:
+            int: The number of shares of the post.
+        """
+
+        graph = self.api_client.get_graph_api_object()
+
+        try:
+            shares_response = graph.get_connections(
+                id=post_id,
+                connection_name="sharedposts",
+            )
+            return shares_response.get("summary", {}).get("total_count", 0)
+
+        except facebook.GraphAPIError as e:
+            print(f"Error retrieving shares for post {post_id}: {e}")
+            return 0  # Return 0 on error
 
 
     def publish_text_post(self, page_id: str, message: str) -> Optional[Dict]:
