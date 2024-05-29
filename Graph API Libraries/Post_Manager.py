@@ -4,13 +4,13 @@
 __init__(self, api_client): Takes a FacebookAPIClient instance as input.
     Initializes the PostManager with the provided API client.
 
-    Methods:
-    get_latest_post(self): Retrieves the latest post from the Facebook Page.
-    get_post_by_id(self, post_id): Retrieves a specific post by its ID.
-    get_all_posts(self): Retrieves all posts from the Facebook Page.
+    Implemented Methods:
+    get_latest_posts(self):
     get_all_post_ids(self): Retrieves all post IDs from the Facebook Page.
     publish_text_post(self, message): Publishes a text-only post.
     publish_photo_post(self, message, photo_path): Publishes a post with a photo and text.
+    
+    OTHER METHODS PENDING PROGRAMMING
     publish_multi_photo_post(self, message, photo_paths): Publishes a post with multiple photos and text.
     publish_video_post(self, message, video_path): Publishes a post with a video and text.
     delete_post(self, post_id): Deletes a specific post.
@@ -32,37 +32,6 @@ class PostManager:
     def __init__(self, api_client: "FacebookAPIClient") -> None:
         self.api_client = api_client
 
-
-    def get_latest_post(self, page_id: str, fields: Optional[str] = None
-                        ) -> Optional[Dict[str, Any]]:
-        """Retrieves the latest post from the specified Facebook Page.
-            It does NOT retrieves the attachments.
-            Attachments are retrieved with the get_post_by_id method.
-
-        Args:
-            page_id (str): The ID of the page to retrieve the post from.
-            fields (str, optional): A comma-separated list of fields to include in the response
-            (default: id, message, created_time, permalink_url,
-            likes.summary(true), comments.summary(true)).
-
-        Returns:
-            Optional[Dict[str, Any]]: A dictionary containing the post data if found,
-            otherwise None.
-        """
-        graph = self.api_client.get_graph_api_object()
-
-        # Define default fields if none are provided
-        default_fields = "id,message,created_time,permalink_url,likes.summary(true),comments.summary(true)"
-        fields = fields or default_fields  # Use default if fields is None
-
-        try:
-            posts = graph.get_connections(
-                id=page_id, connection_name="posts", fields=fields, limit=1
-            )
-            return posts["data"][0] if posts.get("data") else None
-        except facebook.GraphAPIError as e:
-            print(f"Error retrieving latest post: {e.message}")
-            return None
 
 
     def get_latest_posts(

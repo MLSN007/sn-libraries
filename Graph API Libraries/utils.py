@@ -9,19 +9,21 @@ including:
 - FacebookAPIClient: A client class for managing Facebook API authentication and interactions.
 """
 
+
 import logging
 from typing import Dict, Any, List, Optional
 import requests
 from bs4 import BeautifulSoup
 import facebook
 
+from facebook_api_client import FacebookAPIClient
+
+
 
 logging.basicConfig(level=logging.DEBUG)  # Set the logging level to DEBUG
 
 
 
-
-from facebook_api_client import FacebookAPIClient
 
 class Utils:
     """A class containing utility functions for your Facebook API project."""
