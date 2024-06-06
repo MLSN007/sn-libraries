@@ -7,7 +7,7 @@ import os
 from typing import Dict, Optional
 import facebook
 
-class FacebookAPIClient:
+class FbApiClient:
     """A client for interacting with the Facebook Graph API.
 
     This class handles authentication, and provides a GraphAPI object,
