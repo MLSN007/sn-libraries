@@ -5,10 +5,10 @@ from typing import List, Dict, Any, Optional
 import facebook  # Make sure you have the 'facebook-sdk' library installed
 import requests
 
-class CommentManager:
+class FbCommentManager:
     """Manages Facebook comment-related actions."""
 
-    def __init__(self, api_client: "FacebookAPIClient") -> None:
+    def __init__(self, api_client: "FbApiClient") -> None:
         self.api_client = api_client
 
     def get_post_comments(
@@ -27,7 +27,7 @@ class CommentManager:
 
         graph = self.api_client.get_graph_api_object()
         all_comments = []
-        default_fields = ["id", "message", "created_time", "from", "like_count", "parent", "user_likes"]  # Updated default fields
+        default_fields = ["id", "message", "created_time", "from", "like_count", "parent", "user_likes","reactions"]  # Updated default fields
         fields_str = ",".join(fields or default_fields)
 
         try:

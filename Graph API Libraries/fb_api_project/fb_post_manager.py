@@ -1,4 +1,4 @@
-""" PostManager (in post_manager.py):
+""" FbPostManager (in post_manager.py):
     A class for managing Facebook post-related actions.
 
 __init__(self, api_client): Takes a FacebookAPIClient instance as input.
@@ -22,7 +22,7 @@ __init__(self, api_client): Takes a FacebookAPIClient instance as input.
 from typing import Dict, Optional, Any, List
 import facebook
 
-class PostManager:
+class FbPostManager:
     """Manages Facebook post-related actions.
 
     Args:
@@ -155,24 +155,24 @@ class PostManager:
         return likes
 
 
-    def get_post_shares(self, post_id: str) -> int:
-        """Retrieves the number of shares for a specific post.
+    def get_post_shares(self, post_id: str) -> List[Dict]:
+        """Retrieves shared post data for a specific post.
 
         Args:
             post_id (str): The ID of the post.
 
         Returns:
-            int: The number of shares of the post.
+            list: The shares of the post.
         """
 
         graph = self.api_client.get_graph_api_object()
 
         try:
-            shares_response = graph.get_connections(
+            shared_posts = graph.get_all_connections(
                 id=post_id,
                 connection_name="sharedposts",
             )
-            return shares_response.get("summary", {}).get("total_count", 0)
+            return list(shared_posts)  # Convert generator to a list for easy access
 
         except facebook.GraphAPIError as e:
             print(f"Error retrieving shares for post {post_id}: {e}")

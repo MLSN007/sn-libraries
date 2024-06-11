@@ -16,7 +16,7 @@ import requests
 from bs4 import BeautifulSoup
 import facebook
 
-from facebook_api_client import FacebookAPIClient
+from fb_api_client import FbApiClient
 
 
 
@@ -25,22 +25,22 @@ logging.basicConfig(level=logging.DEBUG)  # Set the logging level to DEBUG
 
 
 
-class Utils:
+class FbUtils:
     """A class containing utility functions for your Facebook API project."""
 
-    def __init__(self, api_client: "FacebookAPIClient") -> None:
+    def __init__(self, api_client: "FbApiClient") -> None:
         self.api_client = api_client
 
 
 
     @staticmethod
     def get_group_info(
-        api_client: FacebookAPIClient, group_id: str, fields: str = "name,description,icon"
+        api_client: FbApiClient, group_id: str, fields: str = "name,description,icon"
     ) -> Dict[str, Any]:
         """Retrieves basic information about a Facebook group.
 
         Args:
-            api_client (FacebookAPIClient): An instance of the FacebookAPIClient class.
+            api_client (FbApiClient): An instance of the FbApiClient class.
             group_id (str): The ID of the Facebook group.
             fields (str, optional): Comma-separated list of fields to include
                                     (e.g., "name,description").
@@ -78,14 +78,14 @@ class Utils:
 
     @staticmethod
     def get_page_or_user_info(
-        api_client: FacebookAPIClient,
+        api_client: FbApiClient,
         page_or_user_id: str,
         fields: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """Retrieves information about a Facebook page or user.
 
         Args:
-            api_client (FacebookAPIClient): An instance of the FacebookAPIClient class.
+            api_client (FbApiClient): An instance of the FbApiClient class.
             page_or_user_id (str): The ID of the page or user.
             fields (List[str], optional): A list of fields to include in the response. Defaults to None, which fetches the default fields 'id', 'name', and 'about'.
 

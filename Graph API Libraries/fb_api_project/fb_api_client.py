@@ -1,4 +1,4 @@
-""" A client for interacting with the FacebookAPIClient Class
+""" A client for interacting with the FbApiClient Class
     This class handles authentication, provides a GraphAPI object,
     and fetches the Facebook Page ID.
 """
