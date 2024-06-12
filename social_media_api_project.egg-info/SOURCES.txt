@@ -1,0 +1,7 @@
+README.md
+setup.py
+social_media_api_project.egg-info/PKG-INFO
+social_media_api_project.egg-info/SOURCES.txt
+social_media_api_project.egg-info/dependency_links.txt
+social_media_api_project.egg-info/requires.txt
+social_media_api_project.egg-info/top_level.txt
