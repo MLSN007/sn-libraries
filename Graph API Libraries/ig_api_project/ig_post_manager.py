@@ -1,15 +1,18 @@
 # ig_api_project/ig_post_manager.py
 
-from typing import List, Dict
-# ... (Other imports - Instagram API client, shared utilities, etc.)
+from typing import List, Optional
+from shared_utils.data_models import SocialMediaPost
+from ig_api_client import IgApiClient  
+from datetime import datetime
 
 class IGPostManager:
     """A class for managing Instagram post-related actions.
 
-    This class provides methods for publishing, sharing, editing, deleting, and retrieving information about Instagram posts, Reels, and stories.
+    This class provides methods for publishing, sharing, editing, deleting, and retrieving
+    information about Instagram posts, Reels, and stories.
     """
 
-    def __init__(self, api_client):
+    def __init__(self, api_client: IGApiClient) -> None:
         """Initializes the IGPostManager with the provided API client.
 
         Args:
@@ -18,7 +21,7 @@ class IGPostManager:
         self.api_client = api_client
 
     # Publish Methods
-    def publish_post(self, message: str, media_paths: List[str]) -> Dict:
+    def publish_post(self, message: str, media_paths: List[str]) -> Optional[SocialMediaPost]:
         """Publishes a regular Instagram post with one or more photos or videos.
 
         Args:
@@ -26,9 +29,43 @@ class IGPostManager:
             media_paths: A list of file paths to the media files (photos or videos).
 
         Returns:
-            A dictionary containing the response from the Instagram API.
+            A SocialMediaPost object representing the published post, or None if publishing fails.
         """
-        pass 
+
+        try:
+            # 1. Upload media and get media IDs
+            media_ids = [self.api_client.upload_media(path) for path in media_paths]
+
+            # 2. Publish the post using the Instagram Graph API
+            response = self.api_client.post_media(media_ids, caption=message)
+
+            # 3. Extract relevant data from the API response
+            post_id = response.get("id")
+            timestamp = datetime.fromtimestamp(response.get("timestamp", 0))
+
+            # 4. Create and return a SocialMediaPost object
+            return SocialMediaPost(
+                platform="IG",
+                post_id=post_id,
+                message=message,
+                author=self.api_client.user_id,
+                timestamp=timestamp,
+                media_type=[self._get_media_type(path) for path in media_paths],  # Get media types
+                media_urls=[self.api_client.get_media_url(media_id) for media_id in media_ids],
+            )
+        except Exception as e:  # Catch any exceptions during publishing
+            print(f"Error publishing Instagram post: {e}")
+            return None
+    # ... (Other methods - Add 'pass' under each for now)
+
+    def _get_media_type(self, media_path: str) -> str:
+        """Helper function to determine the media type (photo or video) based on the file extension."""
+        if media_path.endswith((".jpg", ".jpeg", ".png")):
+            return "photo"
+        elif media_path.endswith((".mp4", ".mov")):
+            return "video"
+        else:
+            raise ValueError(f"Unsupported media type: {media_path}")
 
     def publish_reel(self, video_path: str, caption: str) -> Dict:
         """Publishes a Reel.
