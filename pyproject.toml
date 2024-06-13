@@ -12,17 +12,26 @@ pandas = "^2.2.2"
 numpy = "^1.26.4"
 requests = "^2.32.3"
 
-[tool.poetry.packages]
-fb-api = { include = "fb-api" }
-ig-api = { include = "ig-api" }
-shared-utils = { include = "shared-utils" }
-th-api = { include = "th-api" }
-tt-api = { include = "tt-api" }
-yt-api = { include = "yt-api" }
-x-api = { include = "x-api" }
-main-app = { include = "main-app" }
-tests = { include = "tests" }
 
+[tool.poetry.packages]
+[tool.poetry.packages.fb-api]
+include = "fb-api"
+[tool.poetry.packages.ig-api]
+include = "ig-api"
+[tool.poetry.packages.shared-utils]
+include = "shared-utils"
+[tool.poetry.packages.th-api]
+include = "th-api"
+[tool.poetry.packages.tt-api]
+include = "tt-api"
+[tool.poetry.packages.yt-api]
+include = "yt-api"
+[tool.poetry.packages.x-api]
+include = "x-api"
+[tool.poetry.packages.main-app]
+include = "main-app"
+[tool.poetry.packages.tests]
+include = "tests"
 
 
 [build-system]
