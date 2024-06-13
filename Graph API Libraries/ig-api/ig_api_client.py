@@ -14,7 +14,7 @@ class IgApiClient:
         # ... (Existing method for making API requests)
     
     def post_media(self, media_ids: List[str], caption: str) -> Dict:
-        """Publishes a post with the given media IDs and media caption.
+        """Publishes a post with the given media IDs and caption.
 
         Args:
             media_ids: A list of media IDs obtained by uploading media using the 'upload_media' function.
