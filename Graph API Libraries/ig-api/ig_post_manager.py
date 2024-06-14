@@ -5,7 +5,7 @@ from shared_utils.data_models import SocialMediaPost
 from ig_api_client import IgApiClient  
 from datetime import datetime
 
-class IGPostManager:
+class IgPostManager:
     """A class for managing Instagram post-related actions.
 
     This class provides methods for publishing, sharing, editing, deleting, and retrieving

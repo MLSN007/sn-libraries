@@ -43,7 +43,7 @@ class IgApiClient:
             endpoint = f"{self.base_url}/media_publish"
             params = {
                 "creation_id": media_ids[0],
-                "caption": caption
+                "caption": caption  # This is the final caption for the post
             }
             return self._make_api_request(endpoint, params)
         except Exception as e:  # Catch specific Instagram API errors here
