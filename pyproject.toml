@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "scrapping-and-post-libraries"
+version = "0.1.0"
+description = "Libraries to scrap and publish on SN"
+authors = ["MLSMIT <manuel.luis.sanchez@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pandas = "^2.2.2"
+numpy = "^2.0.0"
+requests = "^2.32.3"
+facebook-sdk = "^3.1.0"
+hikerapi = "^0.0.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
