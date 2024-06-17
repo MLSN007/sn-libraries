@@ -1,9 +1,10 @@
 [tool.poetry]
-name = "scrapping-and-post-libraries"
+name = "sn-libraries"
 version = "0.1.0"
 description = "Libraries to scrap and publish on SN"
 authors = ["MLSMIT <manuel.luis.sanchez@gmail.com>"]
 readme = "README.md"
+
 
 [tool.poetry.dependencies]
 python = "^3.12"
