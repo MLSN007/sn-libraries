@@ -12,18 +12,12 @@ pandas = "^2.1.2"
 numpy = "^1.27.0"
 hikerapi = "^0.0.2"
 requests = "^2.32.3"
-
-
-[tool.poetry.packages]
 fb-api = { path = "Graph API Libraries/fb-api" }
-
 ig-api = { path = "Graph API Libraries/ig-api" }
 th-api = { path = "Graph API Libraries/th-api" }
 tt-api = { path = "Graph API Libraries/tt-api" }
 x-api = { path = "Graph API Libraries/x-api" }
 yt-api = { path = "Graph API Libraries/yt-api" }
-
-
 
 [build-system]
 requires = ["poetry-core"]
