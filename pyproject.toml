@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "scrapping-and-post-libraries"
+name = "scrapping_and_post_libraries"
 version = "0.1.0"
 description = "Graph based, Hikerapi based Libraries, and other Scraping based libraries"
 authors = ["MLSMIT <manuel.luis.sanchez@gmail.com>"]
@@ -9,15 +9,9 @@ readme = "README.md"
 python = "^3.11"
 facebook-sdk = "^3.1.0"
 pandas = "^2.1.2"
-numpy = "^1.27.0"
+numpy = "^2.0.0"
 hikerapi = "^0.0.2"
 requests = "^2.32.3"
-# fb-api = { path = "Graph API Libraries/fb-api" }
-# ig-api = { path = "Graph API Libraries/ig-api" }
-# th-api = { path = "Graph API Libraries/th-api" }
-tt-api = { path = "Graph API Libraries/tt-api" }
-x-api = { path = "Graph API Libraries/x-api" }
-yt-api = { path = "Graph API Libraries/yt-api" }
 
 [build-system]
 requires = ["poetry-core"]
