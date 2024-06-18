@@ -6,7 +6,7 @@ authors = ["MLSMIT <manuel.luis.sanchez@gmail.com>"]
 readme = "README.md"
 
 packages = [
-    { include = "sn_libraries", from = "src" }
+    { include = "sn-libraries" }
 ]
 
 [tool.poetry.dependencies]
