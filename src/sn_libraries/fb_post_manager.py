@@ -1,4 +1,4 @@
-""" FbPostManager (in post_manager.py):
+""" FbPostManager (in fb_post_manager.py):
     A class for managing Facebook post-related actions.
 
 __init__(self, api_client): Takes a FacebookAPIClient instance as input.

@@ -5,6 +5,9 @@ description = "Libraries to scrap and publish on SN"
 authors = ["MLSMIT <manuel.luis.sanchez@gmail.com>"]
 readme = "README.md"
 
+packages = [
+    { include = "sn_libraries", from = "src" }
+]
 
 [tool.poetry.dependencies]
 python = "^3.12"
