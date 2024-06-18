@@ -1,0 +1,15 @@
+{
+    "display_name": "sn-env",
+    "language": "python",
+    "argv": [
+      "C:\\Users\\manue\\Documents\\GitHubMLSN\\sn-libraries\\Scripts\\python.exe",
+      "-m",
+      "ipykernel_launcher",
+      "-f",
+      "{connection_file}"
+    ],
+    "env": {
+      "PYTHONHOME": "C:\\Users\\manue\\Documents\\GitHubMLSN\\sn-libraries"
+    }
+  }
+  
