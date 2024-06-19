@@ -2,7 +2,7 @@
     "display_name": "sn-env",
     "language": "python",
     "argv": [
-      "C:\\Users\\manue\\Documents\\GitHubMLSN\\sn-libraries\\Scripts\\python.exe",
+      "C:\\Users\\manue\\Documents\\GitHubMLSN\\sn-libraries\\sn-env\\Scripts\\python.exe",
       "-m",
       "ipykernel_launcher",
       "-f",
