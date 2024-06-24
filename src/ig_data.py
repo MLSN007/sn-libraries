@@ -38,3 +38,12 @@ def create_post_dataframe(posts):
 
     return pd.DataFrame(data)
 
+
+def save_post_dataframe(df, filename="ig_posts.csv"):
+    """Saves the DataFrame to a CSV file."""
+    try:
+        df.to_csv(filename, index=False)  # Save without row indices
+        print(f"DataFrame saved to {filename}")
+    except Exception as e:
+        logging.error(f"Error saving DataFrame: {e}")
+        raise

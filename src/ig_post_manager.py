@@ -46,22 +46,69 @@ class IgPostManager:
             # If location_pk is provided, create a Location object
             location = None
             if location_pk:
-                location = Location(
-                    pk=location_pk, 
-                    name="Malecón Cisneros - Miraflores"  # Use the actual name here
-                )
-            
-            # Upload the photo with the Location object
+                location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores")
+
+            # Upload the photo
             media = self.client.photo_upload(
-                photo_path, 
-                caption=caption, 
-                location=location 
+                photo_path, caption=caption, location=location
             )
+
+            # Create IgPost object to store post information
+            ig_post = IgPost(
+                media_id=media.pk,
+                media_type="photo",  
+                caption=caption,
+                timestamp=media.taken_at,
+                location=media.location,
+                like_count=media.like_count,
+                comment_count=media.comment_count
+            )
+
+            return ig_post
+
+        except FileNotFoundError as e:
+            logging.error(f"File not found error: {e}")
+            raise
+        except Exception as e:
+            logging.error(f"Error uploading photo: {e}")
+            raise
+
+
+
+    def upload_video(self, video_path, caption="", location_pk=None):
+        """
+        Uploads a single video to Instagram.
+
+        Args:
+            video_path (str): The path to the video file.
+            caption (str, optional): The caption for the video. Defaults to "".
+            location_pk (int, optional): The location PK to tag in the post. Defaults to None.
+
+        Returns:
+            IgPost: An object containing information about the uploaded post.
+
+        Raises:
+            FileNotFoundError: If the video file is not found.
+            Exception: If there is an error during the upload process.
+        """
+
+        try:
+            # Check if the file exists
+            if not os.path.exists(video_path):
+                raise FileNotFoundError(f"Video not found at: {video_path}")
+
+            # If location_pk is provided, create a Location object
+            location = None
+            if location_pk:
+                location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores")
+
+            # Upload the video
+            media = self.client.video_upload(video_path, caption=caption, location=location)
             
             # Create IgPost object to store post information
             ig_post = IgPost(
                 media_id=media.pk,
-                media_type="photo",
+                media_type="video",  # Updated media_type for videos
                 caption=caption,
                 timestamp=media.taken_at,
                 location=media.location,
@@ -70,82 +117,175 @@ class IgPostManager:
             )
             
             return ig_post
-            
+
         except FileNotFoundError as e:
             logging.error(f"File not found error: {e}")
-            raise  # Re-raise the exception after logging
+            raise
         except Exception as e:
-            logging.error(f"Error uploading photo: {e}")
-            raise  # Re-raise the exception after logging
+            logging.error(f"Error uploading video: {e}")
+            raise
 
+    def upload_album(self, paths, caption, location_pk=None):
+        """
+        Uploads a carousel/album post to Instagram with an optional caption and location.
 
+        Args:
+            paths (list): A list of paths to photo and/or video files.
+            caption (str, optional): The caption for the album. Defaults to "".
+            location_pk (int, optional): The location PK to tag in the post. Defaults to None.
 
-    def upload_video(self, video_path, caption=""):
-        try:
-            return self.client.video_upload(video_path, caption=caption)
-        except Exception as e:
-            raise Exception(f"Error uploading video: {e}")
+        Returns:
+            IgPost: An object containing information about the uploaded album.
 
-    def upload_album(self, paths, caption=""):
+        Raises:
+            FileNotFoundError: If any of the media files are not found.
+            Exception: If there is an error during the upload process.
+        """
+
         try:
             media = []
-            for path in paths:
-                if path.endswith((".jpg", ".jpeg", ".png")):
-                    media.append(self.client.photo_upload(path))
-                elif path.endswith((".mp4", ".mov")):
-                    media.append(self.client.video_upload(path))
-            return self.client.album_upload(media, caption=caption)
+            for path in paths:  # Correctly indented for loop
+                if not os.path.exists(path):
+                    raise FileNotFoundError(f"Media file not found at: {path}")
+
+            if path.endswith((".jpg", ".jpeg", ".png")):
+                media.append(self.client.photo_upload(path, caption=caption))
+            elif path.endswith((".mp4", ".mov")):
+                media.append(self.client.video_upload(path, caption=caption))
+
+
+            # If location_pk is provided, create a Location object
+            location = None
+            if location_pk:
+                location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores")
+
+            # Upload the album
+            album = self.client.album_upload(media, caption=caption, location=location)
+            album = self.client.album_upload(media, caption=caption, location=location)
+            # Create IgPost object to store post information
+            ig_post = IgPost(
+                media_id=album.pk,
+                media_type="album",  # Updated media_type for albums
+                caption=caption,
+                timestamp=album.taken_at,
+                location=album.location,
+                like_count=album.like_count,
+                comment_count=album.comment_count
+            )
+
+            return ig_post
+
+        except FileNotFoundError as e:
+            logging.error(f"File not found error: {e}")
+            raise
         except Exception as e:
-            raise Exception(f"Error uploading album: {e}") from e
+            logging.error(f"Error uploading album: {e}")
+            raise
 
 
-    def upload_video_with_music(self, video_path, music_path, caption=""):
-        """
-        Uploads a video to Instagram with a specified music track and an optional caption.
+def search_music(self, query):
+    """
+    Searches for music tracks on Instagram based on a query.
 
-        Args:
-            video_path: The path to the video file.
-            music_path: The path to the music file (supported formats: .mp3, .m4a).
-            caption: (Optional) The caption for the video.
+    Args:
+        query (str): The search query for music.
 
-        Returns:
-            The Instagrapi Media object representing the uploaded video with music.
-        """
+    Returns:
+        list: A list of MusicTrack objects matching the query.
 
-        try:
-            return self.client.video_upload(video_path, caption=caption, audio_path=music_path)
-        except Exception as e:
-            raise Exception(f"Error uploading video with music: {e}")
+    Raises:
+        Exception: If there is an error searching for music.
+    """
+    try:
+        return self.client.music_search(query)
+    except Exception as e:
+        logging.error(f"Error searching for music: {e}")
+        raise Exception(f"Error searching for music: {e}")
 
-    def search_music(self, query):
-        """
-        Searches for music tracks on Instagram based on a query.
 
-        Args:
-            query: The search query for music.
+def upload_video_with_music(self, video_path, music_path, caption="", location_pk=None):
+    """
+    Uploads a video to Instagram with a specified music track, caption, and optional location.
 
-        Returns:
-            A list of MusicTrack objects matching the query.
-        """
-        try:
-            return self.client.music_search(query)
-        except Exception as e:
-            raise Exception(f"Error searching for music: {e}")
+    Args:
+        video_path (str): The path to the video file.
+        music_path (str): The path to the music file (supported formats: .mp3, .m4a).
+        caption (str, optional): The caption for the video. Defaults to "".
+        location_pk (int, optional): The location PK to tag in the post. Defaults to None.
 
-    def upload_reel_with_music(self, video_path, music_track_id, caption=""):
-        """
-        Uploads a Reel to Instagram with a specified music track ID and an optional caption.
-        (Note: Reel-specific features like effects are not yet implemented.)
+    Returns:
+        IgPost: An object containing information about the uploaded video.
 
-        Args:
-            video_path: The path to the video file.
-            music_track_id: The ID of the music track to use (obtained from `search_music`).
-            caption: (Optional) The caption for the Reel.
+    Raises:
+        FileNotFoundError: If either the video or music file is not found.
+        Exception: If there is an error during the upload process.
+    """
 
-        Returns:
-            The Instagrapi Media object representing the uploaded Reel.
-        """
-        try:
-            return self.client.clip_upload(video_path, caption=caption, music_id=music_track_id)
-        except Exception as e:
-            raise Exception(f"Error uploading Reel with music: {e}")
+    try:
+        # Check if files exist
+        for file_path in [video_path, music_path]:
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"File not found at: {file_path}")
+
+        # Create Location object if provided
+        location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores") if location_pk else None
+
+        # Upload video with music
+        media = self.client.video_upload(video_path, caption=caption, audio_path=music_path, location=location)
+
+        return IgPost(
+            media_id=media.pk,
+            media_type="video",
+            caption=caption,
+            timestamp=media.taken_at,
+            location=media.location,
+            like_count=media.like_count,
+            comment_count=media.comment_count
+        )
+    except FileNotFoundError as e:
+        logging.error(f"File not found error: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"Error uploading video with music: {e}")
+        raise
+
+
+def upload_reel_with_music(self, video_path, music_track_id, caption="", location_pk=None):
+    """
+    Uploads a Reel to Instagram with a specified music track, caption, and optional location.
+
+    Args:
+        video_path (str): The path to the video file.
+        music_track_id (str): The ID of the music track to use.
+        caption (str, optional): The caption for the Reel. Defaults to "".
+        location_pk (int, optional): The location PK to tag in the post. Defaults to None.
+
+    Returns:
+        IgPost: An object containing information about the uploaded Reel.
+
+    Raises:
+        FileNotFoundError: If the video file is not found.
+        Exception: If there is an error during the upload process.
+    """
+    try:
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video not found at: {video_path}")
+
+        location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores") if location_pk else None
+        media = self.client.clip_upload(video_path, caption=caption, music_id=music_track_id, location=location)
+
+        return IgPost(
+            media_id=media.pk,
+            media_type="reel",
+            caption=caption,
+            timestamp=media.taken_at,
+            location=media.location,
+            like_count=media.like_count,  
+            comment_count=media.comment_count
+        )
+    except FileNotFoundError as e:
+        logging.error(f"File not found error: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"Error uploading reel with music: {e}")
+        raise
