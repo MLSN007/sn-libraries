@@ -4,8 +4,11 @@ Facilitates the creation and management of various types of
 Instagram posts (photos, videos, albums/carousels)
 including the ability to add music to videos.
 """
-
+import os  # Import the os module for file system operations
+import logging  # For logging errors
+from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker 
 from ig_client import IgClient # Note the updated import path
+from ig_data import IgPost  # Import the IgPost class
 
 class IgPostManager:  
     def __init__(self, insta_client: IgClient):
@@ -17,11 +20,65 @@ class IgPostManager:
         """
         self.client = insta_client.client
 
-    def upload_photo(self, photo_path, caption=""):
+
+    def upload_photo(self, photo_path, caption="", location_pk=None):
+        """
+        Uploads a single photo to Instagram.
+
+        Args:
+            photo_path (str): The path to the photo file.
+            caption (str, optional): The caption for the photo. Defaults to "".
+            location_pk (int, optional): The location PK to tag in the post. Defaults to None.
+
+        Returns:
+            IgPost: An object containing information about the uploaded post.
+
+        Raises:
+            FileNotFoundError: If the photo file is not found.
+            Exception: If there is an error during the upload process.
+        """
+
         try:
-            return self.client.photo_upload(photo_path, caption=caption)
+            # Check if the file exists
+            if not os.path.exists(photo_path):
+                raise FileNotFoundError(f"Photo not found at: {photo_path}")
+
+            # If location_pk is provided, create a Location object
+            location = None
+            if location_pk:
+                location = Location(
+                    pk=location_pk, 
+                    name="Malecón Cisneros - Miraflores"  # Use the actual name here
+                )
+            
+            # Upload the photo with the Location object
+            media = self.client.photo_upload(
+                photo_path, 
+                caption=caption, 
+                location=location 
+            )
+            
+            # Create IgPost object to store post information
+            ig_post = IgPost(
+                media_id=media.pk,
+                media_type="photo",
+                caption=caption,
+                timestamp=media.taken_at,
+                location=media.location,
+                like_count=media.like_count,
+                comment_count=media.comment_count
+            )
+            
+            return ig_post
+            
+        except FileNotFoundError as e:
+            logging.error(f"File not found error: {e}")
+            raise  # Re-raise the exception after logging
         except Exception as e:
-            raise Exception(f"Error uploading photo: {e}")
+            logging.error(f"Error uploading photo: {e}")
+            raise  # Re-raise the exception after logging
+
+
 
     def upload_video(self, video_path, caption=""):
         try:
