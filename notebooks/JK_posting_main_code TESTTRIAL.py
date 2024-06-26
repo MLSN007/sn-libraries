@@ -127,7 +127,8 @@ def test_client_and_manager():
     session_file = "cl_ig.pkl"
     insta_client = IgClient(session_file)
     post_manager = IgPostManager(insta_client)
-    dummy_post = IgPost(media_id="dummy_post", media_type="photo", media_path="dummy_path", caption="Dummy caption", hashtags=["dummy", "hashtag"], mentions=["dummy", "mention"])
+    dummy_post = IgPost(media_id="dummy_post", media_type="photo",
+                        caption="Dummy caption", tags=["dummy", "hashtag"], mentions=["dummy", "mention"])
     print(f"Dummy post created: {dummy_post}")
 
 # 3. Test publish_post
