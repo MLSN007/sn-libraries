@@ -1,22 +1,21 @@
 """
 ig_post_manager.py:
-Facilitates the creation and management of various types of
-Instagram posts (photos, videos, albums/carousels)
-including the ability to add music to videos.
+Facilitates the creation and management of various types of Instagram posts (photos, videos, albums/carousels).
 """
-import os  # Import the os module for file system operations
-import logging  # For logging errors
+import os
 import time
+import logging
+from typing import List, Dict, Any
+from instagrapi import Client
+from instagrapi.exceptions import ClientError
+from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker
+from ig_client import IgClient
+from ig_data import IgPost
 
-from moviepy.editor import VideoFileClip, AudioFileClip
-from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-
-from instagrapi.exceptions import ClientError, AlbumConfigureError
-from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker 
-from ig_client import IgClient # Note the updated import path
-from ig_data import IgPost  # Import the IgPost class
 
 class IgPostManager:
+    """Handles Instagram post operations using the IgClient."""
+
     def __init__(self, insta_client: IgClient):
         """
         Initializes the PostManager with an IgClient instance.
@@ -26,8 +25,42 @@ class IgPostManager:
         """
         self.client = insta_client.client
 
+    def _upload_media(self, upload_func, media_type, *args, max_retries=3, retry_delay=5, **kwargs):
+        """
+        Generic helper function to upload media (photo, video, album) with retries.
+        """
+        retries = 0
+        while retries < max_retries:
+            try:
+                media = upload_func(*args, **kwargs)
+                return IgPost(
+                    media_id=media.pk,
+                    media_type=media_type,
+                    caption=kwargs.get('caption', ''),
+                    timestamp=media.taken_at,
+                    location=media.location,
+                    like_count=media.like_count,
+                    comment_count=media.comment_count,
+                    published=True,
+                    tags=kwargs.get('hashtags', []),  
+                    mentions=kwargs.get('mentions', []) 
+                )
+            except (FileNotFoundError, ClientError) as e:
+                logging.error(f"Error during {media_type} upload (attempt {retries + 1}/{max_retries}): {e}")
+                retries += 1
+                if retries < max_retries:
+                    logging.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)  # Wait before retrying
+                else:
+                    # Maximum retries reached, mark as failed
+                    return IgPost(
+                        published=False,
+                        failed_attempts=retries,
+                        last_failed_attempt=datetime.datetime.now()
+                    )
 
-    def upload_photo(self, photo_path, caption="", location_pk=None):
+    def upload_photo(self, photo_path: str, caption: str = "", location_pk: int = None, 
+                    hashtags: List[str] = None, mentions: List[str] = None) -> IgPost:
         """
         Uploads a single photo to Instagram.
 
@@ -35,164 +68,111 @@ class IgPostManager:
             photo_path (str): The path to the photo file.
             caption (str, optional): The caption for the photo. Defaults to "".
             location_pk (int, optional): The location PK to tag in the post. Defaults to None.
+            hashtags (List[str], optional): List of hashtags to add to the caption. Defaults to None.
+            mentions (List[str], optional): List of usernames to mention in the caption. Defaults to None.
 
         Returns:
             IgPost: An object containing information about the uploaded post.
 
         Raises:
             FileNotFoundError: If the photo file is not found.
-            Exception: If there is an error during the upload process.
+            ClientError: If there's an error from the Instagram API.
         """
+        # Add hashtags and mentions to caption
+        caption = self._add_tags_and_mentions_to_caption(caption, hashtags, mentions)
+        
+        # If location_pk is provided, create a Location object
+        location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores") if location_pk else None
 
-        try:
-            # Check if the file exists
-            if not os.path.exists(photo_path):
-                raise FileNotFoundError(f"Photo not found at: {photo_path}")
-
-            # If location_pk is provided, create a Location object
-            location = None
-            if location_pk:
-                location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores")
-
-            # Upload the photo
-            media = self.client.photo_upload(
-                photo_path, caption=caption, location=location
-            )
-
-            # Create IgPost object to store post information
-            ig_post = IgPost(
-                media_id=media.pk,
-                media_type="photo",  
-                caption=caption,
-                timestamp=media.taken_at,
-                location=media.location,
-                like_count=media.like_count,
-                comment_count=media.comment_count
-            )
-
-            return ig_post
-
-        except FileNotFoundError as e:
-            logging.error(f"File not found error: {e}")
-            raise
-        except Exception as e:
-            logging.error(f"Error uploading photo: {e}")
-            raise
+        return self._upload_media(
+            self.client.photo_upload, 
+            "photo", 
+            photo_path, 
+            caption=caption, 
+            location=location, 
+            hashtags=hashtags, 
+            mentions=mentions
+        )
 
 
 
-    def upload_reel(self, video_path, caption="", location_pk=None):
+    def upload_video(self, video_path: str, caption: str = "", location_pk: int = None, 
+                     hashtags: List[str] = None, mentions: List[str] = None) -> IgPost:
         """
-        Uploads a single reel to Instagram.
+        Uploads a video (or Reel without music) to Instagram.
 
         Args:
             video_path (str): The path to the video file.
-            caption (str, optional): The caption for the video. Defaults to "".
+            caption (str, optional): The caption for the video/Reel. Defaults to "".
             location_pk (int, optional): The location PK to tag in the post. Defaults to None.
+            hashtags (List[str], optional): List of hashtags to add to the caption. Defaults to None.
+            mentions (List[str], optional): List of usernames to mention in the caption. Defaults to None.
 
         Returns:
-            IgPost: An object containing information about the uploaded post.
+            IgPost: An object containing information about the uploaded video/Reel.
 
         Raises:
             FileNotFoundError: If the video file is not found.
-            Exception: If there is an error during the upload process.
+            ClientError: If there's an error from the Instagram API.
         """
+        # Add hashtags and mentions to caption
+        caption = self._add_tags_and_mentions_to_caption(caption, hashtags, mentions)
+        
+        # If location_pk is provided, create a Location object
+        location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores") if location_pk else None
 
-        try:
-            # Check if the file exists
-            if not os.path.exists(video_path):
-                raise FileNotFoundError(f"Video not found at: {video_path}")
+        return self._upload_media(
+            self.client.video_upload, 
+            "reel", 
+            video_path, 
+            caption=caption, 
+            location=location, 
+            hashtags=hashtags, 
+            mentions=mentions
+        )
 
-            # If location_pk is provided, create a Location object
-            location = None
-            if location_pk:
-                location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores")
-
-            # Upload the video
-            media = self.client.video_upload(video_path, caption=caption, location=location)
-            
-            # Create IgPost object to store post information
-            ig_post = IgPost(
-                media_id=media.pk,
-                media_type="video",  # Updated media_type for videos
-                caption=caption,
-                timestamp=media.taken_at,
-                location=media.location,
-                like_count=media.like_count,
-                comment_count=media.comment_count
-            )
-            
-            return ig_post
-
-        except FileNotFoundError as e:
-            logging.error(f"File not found error: {e}")
-            raise
-        except Exception as e:
-            logging.error(f"Error uploading video: {e}")
-            raise
-
-    def upload_album(self, paths, caption="", location_pk=None, max_retries=3, retry_delay=5):
+    def upload_album(self, paths: List[str], caption: str = "", location_pk: int = None,
+                    hashtags: List[str] = None, mentions: List[str] = None) -> IgPost:
         """
         Uploads a carousel/album post to Instagram with optional caption, location,
         and retry mechanisms for handling errors.
 
         Args:
-            paths (list): A list of paths to photo and/or video files.
+            paths (List[str]): A list of paths to photo and/or video files.
             caption (str, optional): The caption for the album. Defaults to "".
             location_pk (int, optional): The location PK to tag in the post. Defaults to None.
-            max_retries (int, optional): Maximum number of retries in case of errors. Defaults to 3.
-            retry_delay (int, optional): Delay in seconds between retries. Defaults to 5.
+            hashtags (List[str], optional): List of hashtags to add to the caption. Defaults to None.
+            mentions (List[str], optional): List of usernames to mention in the caption. Defaults to None.
+
 
         Returns:
             IgPost: An object containing information about the uploaded album.
 
         Raises:
             FileNotFoundError: If any of the media files are not found.
-            Exception: If the maximum retries are exceeded and the upload still fails.
+            ClientError: If there's an error from the Instagram API.
         """
 
-        retries = 0
-        while retries < max_retries:
-            try:
-                media = []
-                for path in paths:
-                    if not os.path.exists(path):
-                        raise FileNotFoundError(f"Media file not found at: {path}")
+        # Add hashtags and mentions to caption
+        caption = self._add_tags_and_mentions_to_caption(caption, hashtags, mentions)
 
-                    if path.endswith((".jpg", ".jpeg", ".png")):
-                        media.append(self.client.photo_upload(path, caption))
-                    elif path.endswith((".mp4", ".mov")):
-                        media.append(self.client.video_upload(path, caption))
+        # If location_pk is provided, create a Location object
+        location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores") if location_pk else None
+        return self._upload_media(
+            self.client.album_upload,
+            "album",
+            [self.client.photo_upload(p, caption) for p in paths if p.endswith((".jpg", ".jpeg", ".png"))] + 
+            [self.client.video_upload(p, caption) for p in paths if p.endswith((".mp4", ".mov"))],
+            caption=caption,
+            location=location,
+            hashtags=hashtags, mentions=mentions
+        )
 
-                # If location_pk is provided, create a Location object
-                location = None
-                if location_pk:
-                    location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores")
-
-                # Upload the album
-                album = self.client.album_upload(media, caption=caption, location=location)
-
-                # Create IgPost object to store post information
-                ig_post = IgPost(
-                    media_id=album.pk,
-                    media_type="album",
-                    caption=caption,
-                    timestamp=album.taken_at,
-                    location=album.location,
-                    like_count=album.like_count,
-                    comment_count=album.comment_count
-                )
-
-                return ig_post
-
-            except (FileNotFoundError, ClientError, AlbumConfigureError) as e:
-                logging.error(f"Error during album upload (attempt {retries + 1}/{max_retries}): {e}")
-                if retries < max_retries - 1:  # Only retry if attempts remain
-                    logging.info(f"Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    retries += 1
-                else:
-                    raise  # Re-raise the exception if max retries reached
+    def _add_tags_and_mentions_to_caption(self, caption, hashtags, mentions):
+        """Adds hashtags and mentions to the caption."""
+        caption_with_tags = caption + " " + " ".join(hashtags) if hashtags else caption
+        caption_with_mentions = caption_with_tags + " " + " ".join([f"@{m}" for m in mentions]) if mentions else caption_with_tags
+        return caption_with_mentions
 
 
     def search_music(self, query):
