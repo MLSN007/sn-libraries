@@ -10,7 +10,10 @@ import random
 import time
 import datetime
 import logging
+
 import pandas as pd
+import openpyxl
+
 from ig_auth import authenticate_and_save_session
 from ig_client import IgClient
 from ig_data import IgPost, create_post_dataframe
@@ -27,14 +30,16 @@ def publish_post(post_manager: IgPostManager, row: pd.Series):
     caption = row["Caption"]
     hashtags = [tag.strip() for tag in row["Hastags"].split("#") if tag.strip()]  # Split by "#" and remove empty strings
     mentions = row["Mentions"].split(',') if not pd.isna(row["Mentions"]) else []
+    location = row["Location"]
+
 
     if post_type == "photo":
-        return post_manager.upload_photo(media_path, caption, hashtags=hashtags, mentions=mentions)
+        return post_manager.upload_photo(media_path, caption, location, hashtags=hashtags, mentions=mentions)
     elif post_type == "video":
-        return post_manager.upload_reel(media_path, caption, hashtags=hashtags, mentions=mentions)
+        return post_manager.upload_video(media_path, caption, location, hashtags=hashtags, mentions=mentions)
     elif post_type == "album":
         media_paths = media_path.split(",")
-        return post_manager.upload_album(media_paths, caption, hashtags=hashtags, mentions=mentions)
+        return post_manager.upload_album(media_paths, caption, location, hashtags=hashtags, mentions=mentions)
     else:
         raise ValueError(f"Invalid post type: {post_type}")
 
@@ -72,7 +77,11 @@ def main():
     post_manager = IgPostManager(insta_client)
 
     # Read Excel into DataFrame
-    df_posts = pd.read_excel("your_excel_file.xlsx")  # Update with your file path
+    df_posts = pd.read_excel(r"C:\Users\manue\Documents\GitHubMLSN\sn-libraries\notebooks\JK_post_in_queue.xlsx")
+
+    # Check if 'published' column exists in the DataFrame
+    if 'published' not in df_posts.columns:
+        df_posts["published"] = False
 
     # Load existing post history and combine with new data
     df_posts = load_and_merge_post_history(df_posts)
@@ -82,13 +91,13 @@ def main():
     for _, row in df_posts[df_posts['published'] == False].head(2).iterrows():
         try:
             post = publish_post(post_manager, row)
-            if post.published: #Add to the list only if published successfully
+            if post.published:  # Add to the list only if published successfully
                 published_posts.append(post.to_dict())
             else:
                 # If failed, update the DataFrame with failed attempts and timestamp
                 df_posts.loc[df_posts['post_id'] == row['post_id'], 'failed_attempts'] = post.failed_attempts
                 df_posts.loc[df_posts['post_id'] == row['post_id'], 'last_failed_attempt'] = post.last_failed_attempt
-            
+
             time.sleep(random.randint(90, 900))
         except Exception as e:
             # Handle errors (log, retry, skip, or stop)
@@ -108,11 +117,26 @@ def main():
         posts_data = {"posts": published_posts}
         with open(POSTS_HISTORY_FILE, "w", encoding="utf-8") as f:
             json.dump(posts_data, f, ensure_ascii=False, indent=4)
+
+    #Update Posts History
+    if os.path.exists(POSTS_HISTORY_FILE):
+        with open(POSTS_HISTORY_FILE, "r", encoding="utf-8") as f:
+            posts_data = json.load(f)
+        posts_data["posts"].extend(published_posts)
+        with open(POSTS_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(posts_data, f, ensure_ascii=False, indent=4)
+    else: 
+        posts_data = {"posts": published_posts}
+        with open(POSTS_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(posts_data, f, ensure_ascii=False, indent=4)
             
+# ------------------MAIN ------------
 
-# if __name__ == "__main__":
-#    main()
 
+if __name__ == "__main__":
+    main()
+   
+# ------------------ TESTS -------------------
 # 1. Test Authentication
 def test_authentication():
     """Tests the authentication process and saves the session."""
@@ -170,7 +194,7 @@ def run_main_step_by_step():
     post_manager = IgPostManager(insta_client)
 
     # Read Excel into DataFrame
-    df_posts = pd.read_excel("C:\Users\manue\Documents\GitHubMLSN\sn-libraries\notebooks\JK_post_in_queue.xlsx")  # Update with your file path
+    df_posts = pd.read_excel("C:\\Users\\manue\\Documents\\GitHubMLSN\\sn-libraries\\notebooks\\JK_post_in_queue.xlsx")   # Update with your file path
     print("Excel file loaded successfully!")
 
     # Load existing post history and combine with new data
@@ -221,4 +245,4 @@ def run_main_step_by_step():
 # test_publish_post()
 # test_load_and_merge_post_history()
 
-run_main_step_by_step()
+# run_main_step_by_step()

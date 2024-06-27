@@ -67,7 +67,7 @@ class IgPostManager:
         return caption_with_mentions
 
 
-    def upload_photo(self, photo_path: str, caption: str = "", location_pk: int = None, 
+    def upload_photo(self, photo_path: str, caption: str = "", location_pk: int = None,
                     hashtags: List[str] = None, mentions: List[str] = None) -> IgPost:
         """
         Uploads a single photo to Instagram.
