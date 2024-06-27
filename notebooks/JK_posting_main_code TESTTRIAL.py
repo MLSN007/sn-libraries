@@ -28,10 +28,20 @@ def publish_post(post_manager: IgPostManager, row: pd.Series):
     post_type = row["post_type"].lower()
     media_path = row["Video/photo path"]
     caption = row["Caption"]
-    hashtags = [tag.strip() for tag in row["Hastags"].split("#") if tag.strip()]  # Split by "#" and remove empty strings
-    mentions = row["Mentions"].split(',') if not pd.isna(row["Mentions"]) else []
-    location = row["Location"]
+    hashtags = row["Hashtags"]
+    mentions = row["Mentions"]
 
+    location_pk = row.get("Location")  # Get location PK from the row
+
+    if location_pk:
+        try:
+            # Fetch location details from Instagram using the PK
+            location = post_manager.client.location_complete_info(location_pk).location
+        except ClientError as e:
+            logging.error(f"Error getting location info for PK {location_pk}: {e}")
+            location = None  # Set location to None if there's an error
+    else:
+        location = None
 
     if post_type == "photo":
         return post_manager.upload_photo(media_path, caption, location, hashtags=hashtags, mentions=mentions)
@@ -86,8 +96,14 @@ def main():
     # Load existing post history and combine with new data
     df_posts = load_and_merge_post_history(df_posts)
 
+
+pprint(df_posts)
+
+
     # Schedule posts
     published_posts = []
+    df_posts['failed_attempts'] = 0  # Initialize 'failed_attempts' column here
+
     for _, row in df_posts[df_posts['published'] == False].head(2).iterrows():
         try:
             post = publish_post(post_manager, row)
@@ -105,6 +121,11 @@ def main():
             row['published'] = False
             row['failed_attempts'] += 1
             row['last_failed_attempt'] = datetime.datetime.now()
+
+print("solo queda guardar el historico en algun sitio")
+import pprint
+pprint.pprint(published_posts)
+
 
     #Update Posts History
     if os.path.exists(POSTS_HISTORY_FILE):
@@ -176,7 +197,7 @@ def test_publish_post():
 # 4. Test load_and_merge_post_history
 def test_load_and_merge_post_history():
     """Tests the load_and_merge_post_history function with a dummy DataFrame."""
-    dummy_df = pd.DataFrame({"post_id": ["dummy_post"], "post_type": ["photo"], "Video/photo path": ["dummy_path"], "Caption": ["Dummy caption"], "Hastags": ["dummy,hashtag"], "Mentions": ["dummy,mention"]})
+    dummy_df = pd.DataFrame({"post_id": ["dummy_post"], "post_type": ["photo"], "Video/photo path": ["dummy_path"], "Caption": ["Dummy caption"], "Hashtags": ["dummy,hashtag"], "Mentions": ["dummy,mention"]})
     merged_df = load_and_merge_post_history(dummy_df)
     print(f"Merged DataFrame: {merged_df}")
 

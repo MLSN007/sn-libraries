@@ -7,7 +7,7 @@ import time, datetime
 import logging
 from typing import List, Dict, Any
 from instagrapi import Client
-from instagrapi.exceptions import ClientError
+from instagrapi.exceptions import ClientError, MediaError  # Import both ClientError and MediaError
 from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker
 from ig_client import IgClient
 from ig_data import IgPost
@@ -29,25 +29,43 @@ class IgPostManager:
         """
         Generic helper function to upload media (photo, video, album) with retries.
         """
+        # Create IgPost object with processed caption
+        caption = kwargs.get('caption', '')
+        caption_with_tags_and_mentions = self._add_tags_and_mentions_to_caption(
+            caption, kwargs.get('hashtags', []), kwargs.get('mentions', [])
+        )
+
+        
+        # Fetch location details (if provided)
+        location_pk = kwargs.get("location_pk")
+        location = None
+        if location_pk:
+            try:
+                location = self.client.location_complete_info(location_pk).location
+            except ClientError as e:
+                logging.error(f"Error getting location info for PK {location_pk}: {e}")
+
+
         retries = 0
         while retries < max_retries:
             try:
-                media = upload_func(*args, **kwargs)
+                media = upload_func(*args, kwargs.get('caption', ''), location=kwargs.get('location', None))  
                 return IgPost(
                     media_id=media.pk,
                     media_type=media_type,
-                    caption=kwargs.get('caption', ''),
+                    caption=caption_with_tags_and_mentions,
                     timestamp=media.taken_at,
                     location=media.location,
                     like_count=media.like_count,
                     comment_count=media.comment_count,
                     published=True,
-                    tags=kwargs.get('hashtags', []),  
-                    mentions=kwargs.get('mentions', []) 
+                    tags=kwargs.get('hashtags', []),
+                    mentions=kwargs.get('mentions', [])
                 )
-            except (FileNotFoundError, ClientError) as e:
+            except (FileNotFoundError, ClientError, MediaError) as e:  # Catch MediaError as well
                 logging.error(f"Error during {media_type} upload (attempt {retries + 1}/{max_retries}): {e}")
                 retries += 1
+            # ... (rest of the retry logic) ...
                 if retries < max_retries:
                     logging.info(f"Retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)  # Wait before retrying
@@ -67,8 +85,7 @@ class IgPostManager:
         return caption_with_mentions
 
 
-    def upload_photo(self, photo_path: str, caption: str = "", location_pk: int = None,
-                    hashtags: List[str] = None, mentions: List[str] = None) -> IgPost:
+    def upload_photo(self, photo_path: str, caption: str = "", location_pk: int = None, **kwargs) -> IgPost:
         """
         Uploads a single photo to Instagram.
 
@@ -86,12 +103,7 @@ class IgPostManager:
             FileNotFoundError: If the photo file is not found.
             ClientError: If there's an error from the Instagram API.
         """
-        # Add hashtags and mentions to caption
-        caption = self._add_tags_and_mentions_to_caption(caption, hashtags, mentions)
-        
-        # If location_pk is provided, create a Location object
-        location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores") if location_pk else None
-
+    
         return self._upload_media(
             self.client.photo_upload, 
             "photo", 
@@ -104,8 +116,7 @@ class IgPostManager:
 
 
 
-    def upload_video(self, video_path: str, caption: str = "", location_pk: int = None, 
-                     hashtags: List[str] = None, mentions: List[str] = None) -> IgPost:
+    def upload_video(self, video_path: str, caption: str = "", location_pk: int = None, **kwargs) -> IgPost:
         """
         Uploads a video (or Reel without music) to Instagram.
 
@@ -123,12 +134,7 @@ class IgPostManager:
             FileNotFoundError: If the video file is not found.
             ClientError: If there's an error from the Instagram API.
         """
-        # Add hashtags and mentions to caption
-        caption = self._add_tags_and_mentions_to_caption(caption, hashtags, mentions)
-        
-        # If location_pk is provided, create a Location object
-        location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores") if location_pk else None
-
+ 
         return self._upload_media(
             self.client.video_upload, 
             "reel", 
@@ -139,8 +145,7 @@ class IgPostManager:
             mentions=mentions
         )
 
-    def upload_album(self, paths: List[str], caption: str = "", location_pk: int = None,
-                    hashtags: List[str] = None, mentions: List[str] = None) -> IgPost:
+    def upload_album(self, paths: List[str], caption: str = "", location_pk: int = None, **kwargs) -> IgPost:
         """
         Uploads a carousel/album post to Instagram with optional caption, location,
         and retry mechanisms for handling errors.
@@ -161,11 +166,6 @@ class IgPostManager:
             ClientError: If there's an error from the Instagram API.
         """
 
-        # Add hashtags and mentions to caption
-        caption = self._add_tags_and_mentions_to_caption(caption, hashtags, mentions)
-
-        # If location_pk is provided, create a Location object
-        location = Location(pk=location_pk, name="Malecón Cisneros - Miraflores") if location_pk else None
         return self._upload_media(
             self.client.album_upload,
             "album",
@@ -232,7 +232,9 @@ class IgPostManager:
                 caption=caption, 
                 media_type='reel'
             )
-
+            ###################################
+            ###### REWRITE FOLLOWING THE LOGIC OF THE FIRST THREE UPLOAD METHODS
+            ####################################
             # If location_pk is provided, create a Location object
             location = None
             if location_pk:
@@ -301,6 +303,10 @@ class IgPostManager:
                 raise ClientError(f"Unsupported video format: {video_path}")
             if not music_path.endswith(valid_audio_extensions):
                 raise ClientError(f"Unsupported audio format: {music_path}")
+            
+            ###################################
+            ###### REWRITE FOLLOWING THE LOGIC OF THE FIRST THREE UPLOAD METHODS
+            ####################################
             
             # If location_pk is provided, create a Location object
             location = None

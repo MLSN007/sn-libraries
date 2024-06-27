@@ -28,6 +28,21 @@ class IgPost:
         self.tags = tags or []  # Use an empty list as the default if tags is None
         self.mentions = mentions or []  # Use an empty list as the default if mentions is None
 
+    def to_dict(self):
+        return {
+            'media_id': self.media_id,
+            'media_type': self.media_type,
+            'caption': self.caption,
+            'timestamp': self.timestamp.isoformat(),  # Convert to string for CSV
+            'location': self.location,
+            'like_count': self.like_count,
+            'comment_count': self.comment_count,
+            'published': self.published,
+            'tags': self.tags,
+            'mentions': self.mentions,
+            'failed_attempts': self.failed_attempts,
+            'last_failed_attempt': self.last_failed_attempt.isoformat() if self.last_failed_attempt else None 
+        }
 
 def create_post_dataframe(posts):
     """
