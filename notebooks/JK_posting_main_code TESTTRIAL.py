@@ -25,7 +25,7 @@ def publish_post(post_manager: IgPostManager, row: pd.Series):
     post_type = row["post_type"].lower()
     media_path = row["Video/photo path"]
     caption = row["Caption"]
-    hashtags = row["Hastags"].split(',') if not pd.isna(row["Hastags"]) else []
+    hashtags = [tag.strip() for tag in row["Hastags"].split("#") if tag.strip()]  # Split by "#" and remove empty strings
     mentions = row["Mentions"].split(',') if not pd.isna(row["Mentions"]) else []
 
     if post_type == "photo":
@@ -137,7 +137,12 @@ def test_publish_post():
     session_file = "cl_ig.pkl"
     insta_client = IgClient(session_file)
     post_manager = IgPostManager(insta_client)
-    dummy_row = pd.Series({"post_type": "photo", "Video/photo path": "dummy_path", "Caption": "Dummy caption", "Hastags": "dummy,hashtag", "Mentions": "dummy,mention"})
+    dummy_row = pd.Series({"post_type": "photo",
+                           "Video/photo path": "dummy_path",
+                           "Caption": "Dummy caption",
+                           "Tags": "#NurserySchoolParty #Parade #CulturalFestivity",
+                           "Mentions": "dummy,mention", "media_id": "dummy_media_id"})
+
     try:
         post = publish_post(post_manager, dummy_row)
         print(f"Post published successfully: {post}")
@@ -165,7 +170,7 @@ def run_main_step_by_step():
     post_manager = IgPostManager(insta_client)
 
     # Read Excel into DataFrame
-    df_posts = pd.read_excel("your_excel_file.xlsx")  # Update with your file path
+    df_posts = pd.read_excel("C:\Users\manue\Documents\GitHubMLSN\sn-libraries\notebooks\JK_post_in_queue.xlsx")  # Update with your file path
     print("Excel file loaded successfully!")
 
     # Load existing post history and combine with new data
@@ -211,8 +216,9 @@ def run_main_step_by_step():
         print("Post history created successfully!")
 
 # Choose which test or step-by-step execution you want to run
-test_authentication()
-test_client_and_manager()
+# test_authentication()
+# test_client_and_manager()
 # test_publish_post()
 # test_load_and_merge_post_history()
-# run_main_step_by_step()
+
+run_main_step_by_step()

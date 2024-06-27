@@ -3,7 +3,7 @@ ig_post_manager.py:
 Facilitates the creation and management of various types of Instagram posts (photos, videos, albums/carousels).
 """
 import os
-import time
+import time, datetime
 import logging
 from typing import List, Dict, Any
 from instagrapi import Client
@@ -58,6 +58,14 @@ class IgPostManager:
                         failed_attempts=retries,
                         last_failed_attempt=datetime.datetime.now()
                     )
+
+
+    def _add_tags_and_mentions_to_caption(self, caption, hashtags, mentions):
+        """Adds hashtags and mentions to the caption."""
+        caption_with_tags = caption + " " + " ".join(hashtags) if hashtags else caption
+        caption_with_mentions = caption_with_tags + " " + " ".join([f"@{m}" for m in mentions]) if mentions else caption_with_tags
+        return caption_with_mentions
+
 
     def upload_photo(self, photo_path: str, caption: str = "", location_pk: int = None, 
                     hashtags: List[str] = None, mentions: List[str] = None) -> IgPost:
@@ -168,11 +176,6 @@ class IgPostManager:
             hashtags=hashtags, mentions=mentions
         )
 
-    def _add_tags_and_mentions_to_caption(self, caption, hashtags, mentions):
-        """Adds hashtags and mentions to the caption."""
-        caption_with_tags = caption + " " + " ".join(hashtags) if hashtags else caption
-        caption_with_mentions = caption_with_tags + " " + " ".join([f"@{m}" for m in mentions]) if mentions else caption_with_tags
-        return caption_with_mentions
 
 
     def search_music(self, query):
