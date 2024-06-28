@@ -1,182 +1,81 @@
 """
-ig_post_manager.py:
-Facilitates the creation and management of various types of Instagram posts (photos, videos, albums/carousels).
+ig_info_fetcher.py: Fetches Instagram user information using the HikerAPI.
 """
+
 import os
-import time, datetime
+import json
 import logging
-from typing import List, Dict, Any
-from instagrapi import Client
-from instagrapi.exceptions import ClientError, MediaError  # Import both ClientError and MediaError
-from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker
-from ig_client import IgClient
-from ig_data import IgPost
+from typing import Dict, List, Optional
+from hikerapi import Client
+from hikerapi.exceptions import HikerAPIException
 
+DEFAULT_OUTPUT_FILE = "instagram_info.json"
 
-class IgPostManager:
-    """Handles Instagram post operations using the IgClient."""
+class IgInfoFetcher:
+    """A class for fetching Instagram user information using the HikerAPI."""
 
-    def __init__(self, insta_client: IgClient):
+    def __init__(self, api_key: Optional[str] = os.environ.get("HikerAPI_key")) -> None:
         """
-        Initializes the PostManager with an IgClient instance.
+        Initializes the IgInfoFetcher with the HikerAPI key.
 
         Args:
-            insta_client: The IgClient instance to use for Instagram interactions.
-        """
-        self.client = insta_client.client
-
-    def _upload_media(self, upload_func, media_type, *args, max_retries=3, retry_delay=5, **kwargs):
-        """
-        Generic helper function to upload media (photo, video, album) with retries.
-        """
-        # Create IgPost object with processed caption
-        caption = kwargs.get('caption', '')
-        caption_with_tags_and_mentions = self._add_tags_and_mentions_to_caption(
-            caption, kwargs.get('hashtags', []), kwargs.get('mentions', [])
-        )
-
-        
-        # Fetch location details (if provided)
-        location_pk = kwargs.get("location_pk")
-        location = None
-        if location_pk:
-            try:
-                location = self.client.location_complete_info(location_pk).location
-            except ClientError as e:
-                logging.error(f"Error getting location info for PK {location_pk}: {e}")
-
-
-        retries = 0
-        while retries < max_retries:
-            try:
-                media = upload_func(*args, kwargs.get('caption', ''), location=kwargs.get('location', None))  
-                return IgPost(
-                    media_id=media.pk,
-                    media_type=media_type,
-                    caption=caption_with_tags_and_mentions,
-                    timestamp=media.taken_at,
-                    location=media.location,
-                    like_count=media.like_count,
-                    comment_count=media.comment_count,
-                    published=True,
-                    tags=kwargs.get('hashtags', []),
-                    mentions=kwargs.get('mentions', [])
-                )
-            except (FileNotFoundError, ClientError, MediaError) as e:  # Catch MediaError as well
-                logging.error(f"Error during {media_type} upload (attempt {retries + 1}/{max_retries}): {e}")
-                retries += 1
-            # ... (rest of the retry logic) ...
-                if retries < max_retries:
-                    logging.info(f"Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)  # Wait before retrying
-                else:
-                    # Maximum retries reached, mark as failed
-                    return IgPost(
-                        published=False,
-                        failed_attempts=retries,
-                        last_failed_attempt=datetime.datetime.now()
-                    )
-
-
-    def _add_tags_and_mentions_to_caption(self, caption, hashtags, mentions):
-        """Adds hashtags and mentions to the caption."""
-        caption_with_tags = caption + " " + " ".join(hashtags) if hashtags else caption
-        caption_with_mentions = caption_with_tags + " " + " ".join([f"@{m}" for m in mentions]) if mentions else caption_with_tags
-        return caption_with_mentions
-
-
-    def upload_photo(self, photo_path: str, caption: str = "", location_pk: int = None, **kwargs) -> IgPost:
-        """
-        Uploads a single photo to Instagram.
-
-        Args:
-            photo_path (str): The path to the photo file.
-            caption (str, optional): The caption for the photo. Defaults to "".
-            location_pk (int, optional): The location PK to tag in the post. Defaults to None.
-            hashtags (List[str], optional): List of hashtags to add to the caption. Defaults to None.
-            mentions (List[str], optional): List of usernames to mention in the caption. Defaults to None.
-
-        Returns:
-            IgPost: An object containing information about the uploaded post.
+            api_key (str, optional): Your HikerAPI key. Defaults to the value of the environment variable HikerAPI_key.
 
         Raises:
-            FileNotFoundError: If the photo file is not found.
-            ClientError: If there's an error from the Instagram API.
+            ValueError: If the HikerAPI_key environment variable is not set.
         """
-    
-        return self._upload_media(
-            self.client.photo_upload, 
-            "photo", 
-            photo_path, 
-            caption=caption, 
-            location=location, 
-            hashtags=hashtags, 
-            mentions=mentions
-        )
+        if not api_key:
+            raise ValueError("HikerAPI_key environment variable not found.")
+        self.client = Client(token=api_key)
 
-
-
-    def upload_video(self, video_path: str, caption: str = "", location_pk: int = None, **kwargs) -> IgPost:
+    def fetch_info(self, username: str) -> Optional[Dict]:
         """
-        Uploads a video (or Reel without music) to Instagram.
+        Fetches information for a single Instagram user.
 
         Args:
-            video_path (str): The path to the video file.
-            caption (str, optional): The caption for the video/Reel. Defaults to "".
-            location_pk (int, optional): The location PK to tag in the post. Defaults to None.
-            hashtags (List[str], optional): List of hashtags to add to the caption. Defaults to None.
-            mentions (List[str], optional): List of usernames to mention in the caption. Defaults to None.
+            username (str): The Instagram username.
 
         Returns:
-            IgPost: An object containing information about the uploaded video/Reel.
-
-        Raises:
-            FileNotFoundError: If the video file is not found.
-            ClientError: If there's an error from the Instagram API.
+            Optional[Dict]: A dictionary containing the user's information if successful, otherwise None.
         """
- 
-        return self._upload_media(
-            self.client.video_upload, 
-            "reel", 
-            video_path, 
-            caption=caption, 
-            location=location, 
-            hashtags=hashtags, 
-            mentions=mentions
-        )
+        try:
+            user_info = self.client.user_by_username_v2(username)
+            if user_info["status"] == "ok":
+                return user_info
+            else:
+                logging.error("Error fetching data for %s: %s", username, user_info.get("error"))
+        except HikerAPIException as e:
+            logging.error("HikerAPI error for %s: %s", username, e)
+        except Exception as e:
+            logging.error("Unexpected error fetching data for %s: %s", username, e)
+        return None
 
-    def upload_album(self, paths: List[str], caption: str = "", location_pk: int = None, **kwargs) -> IgPost:
+    def fetch_and_save_info(self, usernames: List[str], output_file: str = DEFAULT_OUTPUT_FILE) -> None:
         """
-        Uploads a carousel/album post to Instagram with optional caption, location,
-        and retry mechanisms for handling errors.
+        Fetches information for multiple Instagram users and saves it to a JSON file.
 
         Args:
-            paths (List[str]): A list of paths to photo and/or video files.
-            caption (str, optional): The caption for the album. Defaults to "".
-            location_pk (int, optional): The location PK to tag in the post. Defaults to None.
-            hashtags (List[str], optional): List of hashtags to add to the caption. Defaults to None.
-            mentions (List[str], optional): List of usernames to mention in the caption. Defaults to None.
-
-
-        Returns:
-            IgPost: An object containing information about the uploaded album.
-
-        Raises:
-            FileNotFoundError: If any of the media files are not found.
-            ClientError: If there's an error from the Instagram API.
+            usernames (List[str]): A list of Instagram usernames.
+            output_file (str, optional): The path to the output JSON file. Defaults to "instagram_info.json".
         """
+        all_info_data = []
+        for username in usernames:
+            info_data = self.fetch_info(username)
+            if info_data:
+                all_info_data.append(info_data)
+            else:
+                logging.warning("Failed to fetch info for %s", username)
 
-        return self._upload_media(
-            self.client.album_upload,
-            "album",
-            [self.client.photo_upload(p, caption) for p in paths if p.endswith((".jpg", ".jpeg", ".png"))] + 
-            [self.client.video_upload(p, caption) for p in paths if p.endswith((".mp4", ".mov"))],
-            caption=caption,
-            location=location,
-            hashtags=hashtags, mentions=mentions
-        )
+        try:
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(all_info_data, f, ensure_ascii=False, indent=4)
+            logging.info("Saved %d profiles to %s", len(all_info_data), output_file)
+        except IOError as e:
+            logging.error("Error saving data to file %s: %s", output_file, e)
 
-
+# ---------------------------------------------------------------------------
+# -----------  these methods need further review  ---------------------------
+# ---------------------------------------------------------------------------
 
     def search_music(self, query):
         #### This Method is not working - but needs to be reviewed through the Instagrapi community
