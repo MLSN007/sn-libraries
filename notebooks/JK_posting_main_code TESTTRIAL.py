@@ -18,7 +18,7 @@ from ig_auth import authenticate_and_save_session
 from ig_client import IgClient
 from ig_data import IgPost, create_post_dataframe
 from ig_post_manager import IgPostManager
-from config import POSTS_HISTORY_FILE
+from ig_config import POSTS_HISTORY_FILE
 
 
 def publish_post(post_manager: IgPostManager, row: pd.Series):

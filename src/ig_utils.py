@@ -39,7 +39,7 @@ class IgUtils:
         retries = 0
         while retries < max_retries:
             try:
-                return self.client.location_info(pk)
+                return self.client.client.location_info(pk)
             except (
                 ClientError,
                 ClientJSONDecodeError,
@@ -76,7 +76,8 @@ class IgUtils:
         retries = 0
         while retries < max_retries:
             try:
-                return self.client.location_search(name, limit=limit)
+                locations = self.client.client.fbsearch_places(name)
+                return locations[:1]
             except (ClientError, ClientJSONDecodeError, ClientConnectionError) as e:
                 retries += 1
                 delay = random.uniform(3,8)
@@ -101,11 +102,10 @@ class IgUtils:
         Returns:
             A list of Location objects that are top matches for the query.
         """
-        return [
-            loc
-            for loc in self.get_locations_by_name(name, limit, max_retries)
-            if loc.category == "City"
-        ]
+        locations = self.get_locations_by_name(name, max_retries)
+        # Apply limit after fetching all locations
+        return locations[:limit]
+
 
     def location_to_dict(self, location: Location) -> dict:
         """
