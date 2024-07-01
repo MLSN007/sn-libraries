@@ -12,7 +12,12 @@ from PIL import Image
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pathlib import Path  # Added for file paths
-from instagrapi.types import Media, Location, Usertag, Track
+from instagrapi.types import (
+    Media, Location, UserShort, Usertag, Track
+)
+import instagrapi
+from instagrapi.mixins.media import MediaMixin
+
 from instagrapi.exceptions import (
     ClientError,
     ClientJSONDecodeError,
@@ -29,43 +34,42 @@ class IgPost:
 
     def __init__(
         self,
-        media: Media,
+        media_id: str,
+        media_type: int,
+        caption: str,
+        timestamp: datetime,
+        media_url: str,
         location: Optional[Location] = None,
+        like_count: int = 0,
+        comment_count: int = 0,
+        usertags: List[Usertag] = None,
+        published: bool = True,
+        failed_attempts: int = 0,
+        last_failed_attempt: Optional[datetime] = None,
         tags: Optional[List[str]] = None,
         mentions: Optional[List[str]] = None,
     ) -> None:
-        """
-        Initializes an IgPost object from an Instagrapi Media object.
 
-        Args:
-            media: The Media object representing the Instagram post.
-            location: The location of the post (optional).
-            tags: A list of tags associated with the post (optional).
-            mentions: A list of user mentions in the post (optional).
-        """
-
-        self.media_id = media.id
-        self.media_type = media.media_type
-        self.caption = media.caption_text
-        self.timestamp = media.taken_at  # Already a datetime object
+        self.media_id = media_id
+        self.media_type = media_type
+        self.caption = caption
+        self.timestamp = timestamp
         self.location = location
-        self.media_url = media.thumbnail_url  # Or pick the best media url from media.resources
-        self.like_count = media.like_count
-        self.comment_count = media.comment_count
-        self.usertags = media.usertags or []
-        self._media_dict = media.dict()
-
-        self.published = True 
-        self.failed_attempts = 0
-        self.last_failed_attempt = None
+        self.media_url = media_url
+        self.like_count = like_count
+        self.comment_count = comment_count
+        self.usertags = usertags or []
+        self.published = published
+        self.failed_attempts = failed_attempts
+        self.last_failed_attempt = last_failed_attempt
         self.tags = tags or []
         self.mentions = mentions or []
 
     def to_dict(self) -> Dict[str, Any]:
         """Converts the IgPost instance to a JSON-serializable dictionary."""
         data = self.__dict__.copy()
-        del data["_media_dict"]  
-        data["media"] = self._media_dict
+        if self.location:
+            data["location"] = IgUtils(self.client).location_to_dict(self.location)
         return data
 
 
@@ -182,17 +186,19 @@ def correct_orientation(image_path: Path) -> None:
 
     try:
         img = Image.open(image_path)
-        exif_orientation_tag = 0x0112
-        if hasattr(img, "_getexif") and exif_orientation_tag in img._getexif():
-            orientation = img._getexif()[exif_orientation_tag]
+
+        # Check if EXIF data exists before trying to access it
+        exif_data = img._getexif()  
+        if exif_data and 0x0112 in exif_data:  # 0x0112 is the EXIF tag for orientation
+            orientation = exif_data[0x0112]
             if orientation == 3:
                 img = img.rotate(180, expand=True)
             elif orientation == 6:
                 img = img.rotate(270, expand=True)
             elif orientation == 8:
                 img = img.rotate(90, expand=True)
-            img.save(image_path)
-    except (AttributeError, KeyError, IndexError):
-        # Handle cases where the image doesn't have EXIF data
-        pass
-
+            img.save(image_path)  
+        else:
+            logging.warning(f"No EXIF orientation data found in image: {image_path}") 
+    except (IOError, OSError) as e:
+        logging.error(f"Error opening or processing image: {image_path}, Error: {e}")

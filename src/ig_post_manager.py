@@ -53,9 +53,9 @@ class IgPostManager:
         caption_with_mentions = caption_with_tags + " " + mentions
         return caption_with_mentions
 
-    def upload_photo(self, photo_path: str, caption: str = "", location: Location = None) -> Media:
+    def upload_photo(self, photo_path: str, caption: str = "", location: Location = None) -> IgPost:
         """
-        Uploads a single photo to Instagram.
+        Uploads a single photo to Instagram and returns an IgPost object.
 
         Args:
             photo_path (str): The path to the photo file.
@@ -70,11 +70,32 @@ class IgPostManager:
             FileNotFoundError: If the photo file is not found.
             ClientError: If there's an error from the Instagram API.
         """
+        
         print("Photo path:", photo_path)
         print("Caption:", caption)
+        print("Location Type:",type(location))
         print("Location:", location)
 
-        post = self.client.photo_upload(photo_path, caption, location)
+
+        # post = self.client.photo_upload(photo_path, caption, location)
+        
+        media= self.client.photo_upload(
+            photo_path,
+            caption=caption,
+            location=location
+        )
+          # Create IgPost object directly from the returned Media object
+        post = IgPost(
+            media_id=media.id,
+            media_type=media.media_type,
+            caption=caption,  # Pass the caption directly
+            timestamp=media.taken_at,
+            media_url=media.thumbnail_url, 
+            location=location,
+            like_count=0,  # Set initial like count (it might be 0 when just uploaded)
+            comment_count=0,  
+            usertags=media.usertags,
+        )
 
         return post
 
