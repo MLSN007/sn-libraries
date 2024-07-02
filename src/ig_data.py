@@ -27,5 +27,19 @@ class IgPostData:
     is_album: bool = False
     album_media_ids: Optional[List[str]] = None  # List of media IDs in the album
     album_media_urls: Optional[List[str]] = None  # List of media URLs in the album
-    
+
+
+
+    @dataclass
+    class IgStData:
+        """Represents data for an Instagram story."""
+        media_id: str  # This will be the ID of the story item itself
+        media_type: int  # 1 for image, 2 for video
+        caption: str
+        timestamp: datetime
+        media_url: Optional[str] = None  # URL for image or video thumbnail (if applicable)
+        # Add other relevant attributes as needed (e.g., mentions, links, stickers)
+
+
+
     # Add other relevant attributes as needed (avoid complex objects)
