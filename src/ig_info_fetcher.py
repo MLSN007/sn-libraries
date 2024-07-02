@@ -7,7 +7,6 @@ import json
 import logging
 from typing import Dict, List, Optional
 from hikerapi import Client
-from hikerapi.exceptions import HikerAPIException
 
 DEFAULT_OUTPUT_FILE = "instagram_info.json"
 
@@ -44,8 +43,8 @@ class IgInfoFetcher:
                 return user_info
             else:
                 logging.error("Error fetching data for %s: %s", username, user_info.get("error"))
-        except HikerAPIException as e:
-            logging.error("HikerAPI error for %s: %s", username, e)
+                return None
+
         except Exception as e:
             logging.error("Unexpected error fetching data for %s: %s", username, e)
         return None

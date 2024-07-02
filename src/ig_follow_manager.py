@@ -9,7 +9,6 @@ import random
 from typing import List, Dict, Optional
 from hikerapi import Client
 from ig_client import IgClient
-from ig_data_tools import IgPost
 
 MAX_RESULTS = 500
 MAX_FOLLOWS_PER_DAY = 50
