@@ -1,6 +1,15 @@
 """
-ig_utils.py:
-Provides utility classes and functions for Instagram interactions and data management.
+Utility functions and classes for Instagram interactions and data management.
+
+This module provides tools for working with Instagram data, such as:
+- Searching and retrieving location information.
+- Searching and retrieving music track information.
+- Getting user IDs from usernames.
+- Creating and saving Pandas DataFrames for Instagram posts.
+- Correcting image orientation based on EXIF data.
+
+Classes:
+    IgUtils: A class that provides various utility functions for Instagram interactions.
 """
 
 import time
@@ -28,7 +37,18 @@ logger = logging.getLogger(__name__)
 
 
 class IgUtils:
-    """Utility class for Instagram interactions and data management."""
+    """
+    Utility class for Instagram interactions and data management.
+
+    This class provides methods to interact with Instagram data, including:
+    - Retrieving location information by ID or name.
+    - Searching for music tracks.
+    - Getting user IDs from usernames.
+
+    Args:
+        client (instagrapi.Client): An authenticated Instagrapi client.
+    """
+
 
     MAX_RETRIES = 3
     RETRY_DELAY = 5
@@ -38,7 +58,15 @@ class IgUtils:
         self.client = client
 
     def get_location_by_pk(self, pk: int, max_retries: int = 3) -> Location | None:
-        """Gets a location by its ID (pk) with retry logic."""
+        """Gets a location by its ID (pk) with retry logic.
+
+        Args:
+            pk (int): The ID (pk) of the location to retrieve.
+            max_retries (int, optional): The maximum number of retries (default: 3).
+
+        Returns:
+            Location | None: The Location object if found, or None if not found or after max retries.
+        """
         retries = 0
         while retries < max_retries:
             try:
@@ -57,7 +85,15 @@ class IgUtils:
     def get_locations_by_name(
         self, name: str, max_retries: int = MAX_RETRIES
     ) -> list[Location]:
-        """Searches for locations by name with retry logic."""
+        """Searches for locations by name with retry logic.
+
+        Args:
+            name (str): The name of the location to search for.
+            max_retries (int, optional): The maximum number of retries (default: 3).
+
+        Returns:
+            List[Location]: A list of Location objects matching the search query.
+        """
         retries = 0
         while retries < max_retries:
             try:
@@ -72,7 +108,16 @@ class IgUtils:
 
 
     def get_top_locations_by_name(self, name: str, limit: int = 10, max_retries: int = 3) -> list[Location]:
-        """Gets the top matching locations for a query."""
+        """Gets the top matching locations for a query with a specified limit.
+
+        Args:
+            name (str): The name of the location to search for.
+            limit (int, optional): The maximum number of locations to return (default: 10).
+            max_retries (int, optional): The maximum number of retries for each location search (default: 3).
+
+        Returns:
+            List[Location]: A list of up to 'limit' Location objects matching the search query.
+        """
         locations = self.get_locations_by_name(name, max_retries)
         return locations[:limit]
 

@@ -1,7 +1,10 @@
+"""Instagram Story Manager.
+
+This module provides a class for uploading and managing Instagram stories, 
+specifically for uploading reels to stories with various customizable elements 
+like captions, mentions, locations, hashtags, and links.
 """
-ig_st_manager.py
-Instagram Story Manager
-"""
+
 
 from ig_client import IgClient
 from ig_utils import IgUtils
@@ -27,9 +30,16 @@ from ig_data import IgPostData, IgStData
 
 
 class IgStManager:
+    """Manages the creation and uploading of Instagram stories.
+
+    This class provides methods for uploading reels to Instagram stories with 
+    customizable elements such as captions, mentions, locations, hashtags, and links.
+
+    Args:
+        igcl (IgClient): An instance of the IgClient for Instagram interactions.
+        ig_utils (IgUtils): An instance of IgUtils for utility functions.
     """
-    Instagram Story Manager
-    """
+
 
     def __init__(self, igcl: IgClient, ig_utils: IgUtils) -> None:
         """
@@ -59,24 +69,24 @@ class IgStManager:
         media_height: float = 0.8,
         media_rotation: float = 0.0,
     ) -> Optional[IgStData]:
-        """
-        Uploads a reel to Instagram Story with user-friendly inputs.
+        """Uploads a reel to Instagram Story with customizable elements.
 
         Args:
-            reel_url: URL of the reel to upload.
-            caption: Caption for the story.
-            mentions: String of comma-separated usernames to mention (e.g., "@user1,@user2").
-            location_id: ID of the location to tag.
-            hashtags: String of comma-separated hashtags (e.g., "#tag1,#tag2").
-            link: URL to attach to the story.
-            element_positions: Dictionary mapping element types (mentions, hashtags, links) to their positions (x, y, width, height).
-            element_rotations: Dictionary mapping element types to their rotation angles.
-            media_x, media_y, media_width, media_height, media_rotation: Positioning and rotation parameters for the reel media.
+            reel_url (str): URL of the reel to upload.
+            caption (str, optional): Caption for the story (default: "").
+            mentions (str, optional): Comma-separated usernames to mention (e.g., "@user1,@user2").
+            location_id (int, optional): ID of the location to tag.
+            hashtags (str, optional): Comma-separated hashtags (e.g., "#tag1,#tag2").
+            link (str, optional): URL to attach to the story.
+            element_positions (Dict[str, Tuple[float, float, float, float]], optional): Dictionary mapping element types (mentions, hashtags, links) to their positions (x, y, width, height). Default positions are provided.
+            element_rotations (Dict[str, float], optional): Dictionary mapping element types to their rotation angles. Default rotations are 0.0.
+            media_x, media_y, media_width, media_height, media_rotation (float, optional): Positioning and rotation parameters for the reel media. Default values are provided.
 
         Returns:
-            IgStData object if upload is successful, otherwise None.
+            Optional[IgStData]: An IgStData object representing the uploaded story if successful, or None if an error occurs.
         """
-                # Default element positions and rotations
+        
+        # Default element positions and rotations
         default_element_positions = {
             "mentions": (0.3, 0.3, 0.7, 0.15),
             "hashtags": (0.2, 0.8, 0.7, 0.15),

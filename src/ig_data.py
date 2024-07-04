@@ -11,18 +11,25 @@ from instagrapi.types import (
     UserShort,
     HttpUrl
 )
-from instagrapi.story import StoryBuilder
 
 @dataclass
 class IgPostData:
-    """represents and Instagram post or reel with relevant data
+    """Represents an Instagram post (or reel) with relevant data.
 
-    Media types:
-        Photo - When media_type=1
-        Video - When media_type=2 and product_type=feed
-        IGTV - When media_type=2 and product_type=igtv
-        Reel - When media_type=2 and product_type=clips
-        Album - When media_type=8
+    Attributes:
+        media_id (str): The unique identifier of the post/reel.
+        media_type (int): The type of media (1: Photo, 2: Video/IGTV/Reel, 8: Album).
+        product_type (str): The type of video content ("feed", "igtv", "clips").
+        caption (str): The post caption, potentially including hashtags and mentions.
+        timestamp (datetime): The date and time the post was created.
+        media_url (str, optional): URL of the media (not relevant for albums).
+        location_pk (int, optional): Location ID (primary key).
+        location_name (str, optional): Name of the location.
+        like_count (int): The number of likes (default: 0).
+        comment_count (int): The number of comments (default: 0).
+        is_album (bool): Indicates whether the post is an album (default: False).
+        album_media_ids (List[str], optional): List of media IDs in the album (if it's an album).
+        album_media_urls (List[str], optional): List of media URLs in the album (if it's an album).
     """
     media_id: str
     media_type: int
@@ -40,7 +47,20 @@ class IgPostData:
 
 @dataclass
 class IgStData:
-    """Represents essential data for an Instagram story (reel)."""
+    """Represents essential data for an Instagram story.
+
+    Attributes:
+        pk (int): The unique identifier of the story (primary key).
+        id (str): A unique ID for the story (different from pk).
+        code (str): A shortcode for the story.
+        taken_at (datetime): The date and time the story was created.
+        reel_url (str): The URL of the story reel.
+        caption (str, optional): The story caption (default: "").
+        mentions (List[str], optional): List of mentioned users (default: empty list).
+        location_id (int, optional): The ID of the location tagged in the story.
+        hashtags (List[str], optional): List of hashtags used in the story (default: empty list).
+        link (str, optional): A link included in the story.
+    """
 
     # Parameters extracted from StoryObject (no default values)
     pk: int

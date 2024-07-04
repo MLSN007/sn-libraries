@@ -1,6 +1,10 @@
+"""Extracts and analyzes Instagram user information from a JSON file.
+
+This module provides a class, `IgInfoAnalyzer`, for processing Instagram user
+data obtained from the HikerAPI and stored in a JSON file. It can extract
+relevant information into a Pandas DataFrame and save it to a CSV file.
 """
-ig_info_analyzer.py: Extracts and analyzes Instagram user information from a JSON file.
-"""
+
 import json
 import logging
 from typing import List, Dict, Any
@@ -10,24 +14,33 @@ DEFAULT_INPUT_FILE = "instagram_info.json"
 DEFAULT_OUTPUT_FILE = "instagram_profiles.csv"
 
 class IgInfoAnalyzer:
-    """A class for extracting and analyzing Instagram user information."""
+    """Extracts and analyzes Instagram user information from a JSON file.
+
+    This class provides methods for loading Instagram user data from a JSON file,
+    extracting relevant fields into a Pandas DataFrame, and saving the data to a
+    CSV file.
+
+    Methods:
+        extract_info_data_from_json(input_file): Extracts user data from a JSON file
+            and returns a DataFrame.
+        save_to_csv(df, output_file): Saves a DataFrame containing user data to a CSV
+            file.
+    """
 
     def extract_info_data_from_json(self, input_file: str = DEFAULT_INPUT_FILE) -> pd.DataFrame:
-        """
-        Loads Instagram user information from a JSON file
-        and extracts relevant fields into a Pandas DataFrame.
+        """Loads Instagram user information from a JSON file and extracts relevant fields into a Pandas DataFrame.
 
         Args:
-            input_file (str, optional): The path to the input JSON file.
-                Defaults to "instagram_info.json".
+            input_file (str, optional): The path to the input JSON file. Defaults to "instagram_info.json".
 
         Returns:
-            pandas.DataFrame: A DataFrame containing the extracted user information.
+            pd.DataFrame: A DataFrame containing the extracted user information.
 
         Raises:
             FileNotFoundError: If the input file is not found.
             json.JSONDecodeError: If the JSON file is invalid.
             KeyError: If expected keys are missing in the JSON data.
+            Exception: For other unexpected errors during data extraction.
         """
         try:
             with open(input_file, "r", encoding="utf-8") as f:
@@ -72,13 +85,11 @@ class IgInfoAnalyzer:
             raise
 
     def save_to_csv(self, df: pd.DataFrame, output_file: str = DEFAULT_OUTPUT_FILE) -> None:
-        """
-        Saves the DataFrame to a CSV file.
+        """Saves the DataFrame to a CSV file.
 
         Args:
             df (pandas.DataFrame): The DataFrame to save.
-            output_file (str, optional): The path to the output CSV file.
-                Defaults to "instagram_profiles.csv".
+            output_file (str, optional): The path to the output CSV file. Defaults to "instagram_profiles.csv".
 
         Raises:
             IOError: If there's an error writing to the file.

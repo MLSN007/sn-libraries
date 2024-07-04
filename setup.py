@@ -1,14 +1,20 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='sn-libraries',  # Replace with your project's name
-    version='0.1.0',  # Replace with your project's version
-    packages=find_packages(where='src'),  # Find packages in the 'src' directory
-    package_dir={'': 'src'},  # Specify the root package directory
+    name='sn-libraries',
+    version='0.1.0',
+    packages=find_packages(where='src'),
+    package_dir={'': 'src'},
     install_requires=[
-        # List any external dependencies here
+        'facebook-sdk',
+        'instagrapi',
+        'hikerapi',
         'requests',
         'beautifulsoup4',
-        # ... other dependencies
     ],
+    description="A set of Python libraries for automating Facebook and Instagram functions.",
+    author="Your Name",
+    author_email="your.email@example.com",
+    url="https://github.com/MLSMIT/sn-libraries", 
+    license="MIT", # or your chosen license
 )

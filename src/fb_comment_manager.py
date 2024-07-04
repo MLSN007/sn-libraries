@@ -1,12 +1,21 @@
-"""CommentManager class for handling Facebook comment actions."""
-
+"""A class for managing Facebook comment-related actions."""
 
 from typing import List, Dict, Any, Optional
 import facebook  # Make sure you have the 'facebook-sdk' library installed
 import requests
 
 class FbCommentManager:
-    """Manages Facebook comment-related actions."""
+    """A class for managing Facebook comment-related actions.
+
+    This class provides methods for retrieving comments for Facebook posts, reacting 
+    to comments (by replying and liking), and potentially more comment-related 
+    functionality in the future.
+
+    Args:
+        api_client (FbApiClient): An instance of the FbApiClient for handling 
+            Facebook Graph API interactions.
+    """
+
 
     def __init__(self, api_client: "FbApiClient") -> None:
         self.api_client = api_client
@@ -14,16 +23,18 @@ class FbCommentManager:
     def get_post_comments(
         self, post_id: str, fields: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Retrieves comments for a specific Facebook post.
+        """Retrieves comments for a specific Facebook post with optional filtering.
 
         Args:
             post_id (str): The ID of the post.
-            fields (Optional[List[str]]): List of comment fields to include.
+            fields (Optional[List[str]]): List of comment fields to include (e.g., 
+                ['id', 'message', 'from']). If None, default fields are used.
 
         Returns:
-            List[Dict[str, Any]]: A list of dictionaries where each dictionary
-                                 represents a comment.
+            List[Dict[str, Any]]: A list of dictionaries, each representing a comment, 
+                including the requested fields. Empty list if an error occurs.
         """
+     
 
         graph = self.api_client.get_graph_api_object()
         all_comments = []
@@ -57,17 +68,18 @@ class FbCommentManager:
     def react_to_comment(
         self, comment_id: str, message: Optional[str] = None, like: bool = False
     ) -> Optional[Dict[str, Any]]:
-        """Reacts to a comment by replying and/or liking it.
+        """Reacts to a Facebook comment by replying (optional) and liking (optional).
 
         Args:
-            comment_id (str): The ID of the comment to react to.
-            message (Optional[str]): The reply message. If None, no reply is posted.
-            like (bool, optional): Whether to like the comment. Defaults to False.
+            comment_id (str): The ID of the comment.
+            message (Optional[str]): The reply message. If None, no reply is sent.
+            like (bool, optional): Whether to like the comment (default: False).
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing the API response if successful,
-                                      or None if an error occurs.
+            Optional[Dict[str, Any]]: The API response from posting the reply or like
+                (if successful), or None if an error occurs.
         """
+ 
 
         graph = self.api_client.get_graph_api_object()
         response = None  # Initialize response variable

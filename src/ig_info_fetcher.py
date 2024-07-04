@@ -1,6 +1,11 @@
+"""Fetches Instagram user information using the HikerAPI.
+
+This module provides a class, `IgInfoFetcher`, that facilitates the retrieval of
+Instagram user information using the HikerAPI. The class allows you to fetch
+user information for single or multiple users, and optionally save it to a JSON
+file. 
 """
-ig_info_fetcher.py: Fetches Instagram user information using the HikerAPI.
-"""
+
 
 import os
 import json
@@ -11,7 +16,18 @@ from hikerapi import Client
 DEFAULT_OUTPUT_FILE = "instagram_info.json"
 
 class IgInfoFetcher:
-    """A class for fetching Instagram user information using the HikerAPI."""
+    """Fetches Instagram user information using the HikerAPI.
+
+    Attributes:
+        client (hikerapi.Client): An instance of the HikerAPI client.
+
+    Args:
+        api_key (str, optional): Your HikerAPI key. Defaults to the value of the environment variable "HikerAPI_key".
+
+    Raises:
+        ValueError: If the "HikerAPI_key" environment variable is not set.
+    """
+
 
     def __init__(self, api_key: Optional[str] = os.environ.get("HikerAPI_key")) -> None:
         """

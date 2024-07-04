@@ -1,11 +1,19 @@
 import json
 import logging
-from typing import Optional
+from typing import Optional, Any
 
 class Config:
+    """Configuration class for loading settings from a JSON file.
+
+    This class provides a simple interface for loading configuration settings from a
+    JSON file. If the file doesn't exist, it logs a warning and uses an empty
+    dictionary as the default configuration.
+
+    Attributes:
+        config_file_path (str): The path to the JSON configuration file.
+        config (dict): The loaded configuration dictionary.
     """
-    Configuration class to load settings from a JSON file.
-    """
+
 
     def __init__(self, config_file_path="config.json"):
         """
@@ -18,11 +26,11 @@ class Config:
         self.load_config()
 
     def load_config(self):
-        """
-        Load configuration settings from the JSON file.
+        """Loads configuration settings from the JSON file.
 
-        If the config file is not found, it logs a warning and initializes an empty configuration dictionary.
+        If the file is not found, logs a warning and initializes an empty configuration.
         """
+
         try:
             with open(self.config_file_path, "r", encoding="utf-8") as config_file:
                 self.config = json.load(config_file)
@@ -32,16 +40,18 @@ class Config:
             logging.warning(
                 f"Config file not found at {self.config_file_path}. Using default values."
             )
+        except json.JSONDecodeError as e: # Added JSONDecodeError handling
+            self.config = {}
+            logging.error(f"Error loading config file: {e}")
 
-    def get(self, key, default=None):
-        """
-        Get a configuration value by key.
+    def get(self, key: str, default: Optional[Any] = None) -> Any:
+        """Retrieves a configuration value by key.
 
         Args:
-            key: The key to retrieve the value for.
-            default: The default value to return if the key is not found (default: None).
+            key (str): The configuration key.
+            default (Any, optional): The default value to return if the key is not found.
 
         Returns:
-            The configuration value if found, otherwise the default value.
+            Any: The configuration value associated with the key, or the default value if the key is not found.
         """
         return self.config.get(key, default)

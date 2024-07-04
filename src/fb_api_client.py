@@ -1,7 +1,20 @@
-""" A client for interacting with the FbApiClient Class
-    This class handles authentication, provides a GraphAPI object,
-    and fetches the Facebook Page ID.
+"""A client for interacting with the Facebook Graph API.
+
+This class handles authentication (using either provided credentials or 
+environment variables), provides a convenient `GraphAPI` object for making 
+requests, and stores the Facebook Page ID you intend to interact with.
+
+Attributes:
+    app_id (str): Your Facebook App ID.
+    app_secret (str): Your Facebook App Secret.
+    access_token (str): Your long-lived user access token.
+    page_id (str): The ID of the Facebook Page you want to manage. This is used 
+        in various methods to target specific Page actions.
+    api_version (str): The Graph API version in use (default: '3.1').
+    _graph (Optional[facebook.GraphAPI]): The GraphAPI object for making requests. 
+        Initialized lazily when first needed.
 """
+
 
 import os
 from typing import Dict, Optional
@@ -61,21 +74,30 @@ class FbApiClient:
         access_token: Optional[str] = None,
         page_id: Optional[str] = None,
     ) -> Dict[str, str]:
-        """Loads credentials from environment variables or provided arguments.
+        """Loads Facebook credentials from different sources with priority.
 
-        Args: 
+        This method attempts to load credentials in the following order:
+
+        1. If any arguments (`app_id`, `app_secret`, etc.) are provided, these are used.
+        2. Otherwise, it tries to load credentials from environment variables with the 
+        prefix `FB_ES_`.
+        3. If both of the above fail, a `ValueError` is raised.
+
+        Args:
             app_id (str, optional): Your Facebook App ID.
             app_secret (str, optional): Your Facebook App Secret.
             access_token (str, optional): Your long-lived user access token.
             page_id (str, optional): The ID of the page you want to manage.
 
         Returns:
-            Dict[str, str]: A dictionary containing the keys 'app_id', 'app_secret',
-                            'access_token', and 'page_id'.
+            Dict[str, str]: A dictionary containing the loaded credentials with keys 
+                'app_id', 'app_secret', 'access_token', and 'page_id'.
 
         Raises:
-            ValueError: If credentials are not found in either location.
+            ValueError: If credentials cannot be found in either the arguments or 
+                environment variables.
         """
+
 
         # Check if any arguments are provided
         if any([app_id, app_secret, access_token, page_id]):

@@ -1,8 +1,16 @@
 """ FbPostManager (in fb_post_manager.py):
     A class for managing Facebook post-related actions.
 
-__init__(self, api_client): Takes a FacebookAPIClient instance as input.
-    Initializes the PostManager with the provided API client.
+    This class provides methods to interact with Facebook posts, including retrieving 
+    posts, publishing posts (text and photo), and more. 
+
+    Note: Some methods are still under development (marked as PENDING).
+
+    Args:
+        api_client (FbApiClient): An instance of the FbApiClient for handling 
+            Facebook Graph API interactions.
+    
+
 
     Implemented Methods:
     get_latest_posts(self):
@@ -37,19 +45,16 @@ class FbPostManager:
     def get_latest_posts(
         self, page_id: str, num_posts: int = 10, fields: Optional[str] = None
     ) -> Optional[List[Dict[str, Any]]]:
-        """Retrieves the latest posts from the specified Facebook Page.
-            It does NOT retrieve the attachment details.
+        """Retrieves the latest posts from a Facebook Page without attachment details.
 
         Args:
-            page_id (str): The ID of the page to retrieve the posts from.
-            num_posts (int, optional): The number of posts to retrieve (default: 10, maximum 100).
-            fields (str, optional): A comma-separated list of fields to include in the response.
-                Defaults to None, which fetches a standard set of fields.
+            page_id (str): The ID of the Facebook Page.
+            num_posts (int, optional): The number of posts to retrieve (default: 10, max: 100).
+            fields (str, optional): Comma-separated list of fields to include (default: basic fields).
 
         Returns:
-            Optional[List[Dict[str, Any]]]: A list of dictionaries
-            containing post data,
-            or None if no posts are found or an error occurs.
+            Optional[List[Dict[str, Any]]]: A list of dictionaries, each representing a post,
+                or None if an error occurs.
         """
 
         graph = self.api_client.get_graph_api_object()
@@ -71,21 +76,14 @@ class FbPostManager:
 
 
     def get_post_by_id(self, post_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves a specific post by its ID, including message and media.
+        """Retrieves a specific Facebook post by its ID, including message and media.
 
         Args:
-            post_id (str): The ID of the post to retrieve.
+            post_id (str): The ID of the post.
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing the post data, including:
-                - id (str): The post's unique ID.
-                - message (str, optional): The text content of the post.
-                - created_time (str): The date and time the post was created.
-                - permalink_url (str): The permanent URL to the post.
-                - likes (dict): Summary of likes (total_count).
-                - comments (dict): Summary of comments (total_count).
-                - attachments (dict, optional): Information about attached media (photos, videos).
-                
+            Optional[Dict[str, Any]]: A dictionary containing the post data (including
+                attachments), or None if not found or an error occurs.
                 _____________________________________________________________
                 
                 PENDING TO GET INFORMATION ABOUT SHARES OF THE POST
@@ -121,16 +119,17 @@ class FbPostManager:
             return None
 
     def get_post_likes(self, post_id: str) -> List[Dict[str, Any]]:
-        """Retrieves information about users who liked a specific post, handling permission limitations.
+        """Retrieves information about users who liked a specific Facebook post.
+
+        Handles permission limitations gracefully.
 
         Args:
             post_id (str): The ID of the post.
 
         Returns:
             List[Dict[str, Any]]: A list of dictionaries, each containing either:
-                - "name": The name of the user who liked the post (if permission is granted).
-                - "id": The ID of the user who liked the post (if permission is granted).
-                - "unknown": True, indicating the user's information is not accessible.
+                - User's name and ID (if permission is granted)
+                - {"unknown": True} if user information is not accessible
         """
         graph = self.api_client.get_graph_api_object()
         likes = []
@@ -156,13 +155,13 @@ class FbPostManager:
 
 
     def get_post_shares(self, post_id: str) -> List[Dict]:
-        """Retrieves shared post data for a specific post.
+        """Retrieves shared post data for a specific Facebook post.
 
         Args:
             post_id (str): The ID of the post.
 
         Returns:
-            list: The shares of the post.
+            List[Dict]: A list of dictionaries, each representing a shared post. Returns 0 on error.
         """
 
         graph = self.api_client.get_graph_api_object()
@@ -180,16 +179,17 @@ class FbPostManager:
 
 
     def publish_text_post(self, page_id: str, message: str) -> Optional[Dict]:
-        """Publishes a text-only post on the specified Facebook Page.
+        """Publishes a text-only (or photo) post on a Facebook Page.
 
         Args:
             page_id (str): The ID of the page to publish the post on.
             message (str): The text content of the post.
+            photo_path (str, optional): The path to the photo file (for publish_photo_post only).
 
         Returns:
-            Optional[Dict]: A dictionary containing post details if successful,
-            or None if an error occurs.
+            Optional[Dict]: A dictionary containing post details if successful, or None if an error occurs.
         """
+        
         graph = self.api_client.get_graph_api_object()
         try:
             post = graph.put_object(
@@ -204,12 +204,12 @@ class FbPostManager:
             return None
 
     def publish_photo_post(self, page_id: str, message: str, photo_path: str) -> Optional[Dict]:
-        """Publishes a post with a photo and text on the specified Facebook Page.
+        """Publishes a text-only (or photo) post on a Facebook Page.
 
         Args:
             page_id (str): The ID of the page to publish the post on.
             message (str): The text content of the post.
-            photo_path (str): The path to the photo file.
+            photo_path (str, optional): The path to the photo file (for publish_photo_post only).
 
         Returns:
             Optional[Dict]: A dictionary containing post details if successful, or None if an error occurs.

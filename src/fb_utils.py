@@ -1,13 +1,13 @@
-"""
-utils.py
+"""Utility functions for interacting with the Facebook Graph API.
 
-This module provides utility functions for interacting with the Facebook Graph API, 
-including:
+This module provides various helper functions for working with the Facebook Graph
+API, such as retrieving information about groups and pages/users.
 
-- get_group_info: Retrieves information about a Facebook group.
-- get_page_or_user_info: Retrieves information about a Facebook page or user.
-- FacebookAPIClient: A client class for managing Facebook API authentication and interactions.
+Classes:
+    FbUtils: A class containing utility functions for Facebook API interactions.
+        
 """
+
 
 
 import logging
@@ -23,10 +23,16 @@ from fb_api_client import FbApiClient
 logging.basicConfig(level=logging.DEBUG)  # Set the logging level to DEBUG
 
 
-
-
 class FbUtils:
-    """A class containing utility functions for your Facebook API project."""
+    """A class containing utility functions for Facebook API interactions.
+
+    This class requires an instance of `FbApiClient` to be passed during
+    initialization for handling API authentication and requests.
+
+    Args:
+        api_client (FbApiClient): An instance of the FbApiClient for making API requests.
+    """
+
 
     def __init__(self, api_client: "FbApiClient") -> None:
         self.api_client = api_client
@@ -42,12 +48,12 @@ class FbUtils:
         Args:
             api_client (FbApiClient): An instance of the FbApiClient class.
             group_id (str): The ID of the Facebook group.
-            fields (str, optional): Comma-separated list of fields to include
-                                    (e.g., "name,description").
+            fields (str, optional): Comma-separated list of fields to include (e.g., "name,description,icon"). Defaults to "name,description,icon".
 
         Returns:
-            Dict[str, Any]: A dictionary containing the group's information.
+            Dict[str, Any]: A dictionary containing the group's information, or an empty dictionary if an error occurs.
         """
+        
         graph = api_client.get_graph_api_object()  # Use the API client to get the graph object
         try:
             group_data = graph.get_object(id=group_id, fields=fields)
@@ -58,7 +64,14 @@ class FbUtils:
 
     @staticmethod
     def get_page_id(page_name: str) -> Optional[str]:
-        """Attempts to scrape the User ID of a Facebook Page by its name."""
+        """Attempts to scrape the User ID of a Facebook Page by its name.
+
+        Args:
+            page_name (str): The name of the Facebook page.
+
+        Returns:
+            Optional[str]: The ID of the page if found, or None if not found or an error occurs.
+        """
 
         url = f"https://www.facebook.com/{page_name}"
         try:
@@ -87,11 +100,11 @@ class FbUtils:
         Args:
             api_client (FbApiClient): An instance of the FbApiClient class.
             page_or_user_id (str): The ID of the page or user.
-            fields (List[str], optional): A list of fields to include in the response. Defaults to None, which fetches the default fields 'id', 'name', and 'about'.
+            fields (Optional[List[str]]): A list of fields to include in the response. Defaults to ['id', 'name', 'about'].
 
         Returns:
             Dict[str, Any]: A dictionary containing the requested information about the page or user, 
-                            or an empty dictionary if there was an error.
+                or an empty dictionary if there was an error.
         """
 
         graph = api_client.get_graph_api_object()

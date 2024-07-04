@@ -1,6 +1,8 @@
-"""
-ig_post_manager.py:
-Facilitates the creation and management of various types of Instagram posts (photos, videos, albums/carousels).
+"""Facilitates the creation and management of Instagram posts.
+
+This module provides classes and functions for creating, uploading, and managing
+various types of Instagram posts, including photos, videos, reels, and albums
+(carousels). It includes retry mechanisms for handling potential API errors.
 
 Media types:
 Photo - When media_type=1
@@ -28,8 +30,17 @@ from ig_data import IgPostData
 logger = logging.getLogger(__name__)
 
 class IgPostManager:
-    """Handles Instagram post operations using the IgClient."""
-    
+    """Handles Instagram post operations using the IgClient.
+
+    This class provides methods to upload and manage various types of Instagram posts.
+    It includes a retry mechanism to handle temporary errors during uploads.
+
+    Args:
+        igcl (IgClient): The IgClient instance for Instagram interactions.
+    """
+
+    # Constants
+
     MAX_RETRIES = 1  # Maximum number of retries
     RETRY_DELAY = 5  # Delay between retries in seconds
 
@@ -46,15 +57,15 @@ class IgPostManager:
 
     def _add_tags_and_mentions_to_caption(self, caption: str, hashtags: str, mentions: str) -> str:
         """
-        Adds hashtags and mentions to the caption.
+        Adds hashtags and mentions to a caption string.
 
         Args:
             caption (str): The original caption.
-            hashtags (List[str]): List of hashtags to add.
-            mentions (List[str]): List of usernames to mention.
+            hashtags (str): A string containing hashtags separated by spaces.
+            mentions (str): A string containing mentions (usernames) separated by spaces.
 
         Returns:
-            str: The caption with added hashtags and mentions.
+            str: The modified caption with hashtags and mentions appended.
         """
 
 
@@ -62,7 +73,7 @@ class IgPostManager:
         print("Hashtags value:", hashtags)
         print("Mentions type:", type(mentions))
         print("Mentions value:", mentions)
-    
+
         caption_with_tags = caption + " " + hashtags
         caption_with_mentions = caption_with_tags + " " + mentions
         return caption_with_mentions
@@ -70,20 +81,21 @@ class IgPostManager:
     def upload_photo(self, photo_path: str, caption: str = "", location: Location = None
                      ) -> IgPostData:
         """
-        Uploads a single photo to Instagram and returns an IgPostData object.
+        Uploads a photo to Instagram.
 
         Args:
-            photo_path (str): The path to the photo file.
-            caption (str, optional): The caption for the photo. Defaults to "".
-                                        caption already includes tags and mentions.
-            location (Location object, optional): The location object to tag in the post. Defaults to None.
+            (file_path): Path to the media file.
+            caption (str, optional): Caption for the post (default: "").
+            location (Location, optional): Location object for tagging (default: None).
 
         Returns:
-            Media: An instagrapi object containing information about the uploaded post.
+            IgPostData: An IgPostData object representing the uploaded media.
 
         Raises:
-            FileNotFoundError: If the photo file is not found.
-            ClientError: If there's an error from the Instagram API.
+            FileNotFoundError: If the media file is not found.
+            ValueError: If the file format is not supported.
+            MediaError: If there's an error during the upload process.
+            ClientError: If there's a general Instagrapi client error.
         """
 
         valid_extensions = [".jpg", ".jpeg", ".png", ".webp"]
@@ -91,7 +103,7 @@ class IgPostManager:
             raise ValueError(
                 "Invalid file format. Only JPG/JPEG/PNG/WEBP files are supported."
             )
-        
+
         retries = 0
         while retries < self.MAX_RETRIES:
             try:
@@ -104,9 +116,9 @@ class IgPostManager:
                     media_id=media.id,
                     media_type=media.media_type,
                     product_type=media.product_type,
-                    caption=caption,  
+                    caption=caption,
                     timestamp=media.taken_at,
-                    media_url=media.thumbnail_url,  
+                    media_url=media.thumbnail_url,
                     location_pk=location.pk if location else None,  # Extract location ID
                     location_name=location.name if location else None, # Extract location name
                     like_count=media.like_count,
@@ -129,7 +141,21 @@ class IgPostManager:
         self, video_path: str, caption: str = "", location: Location = None
         ) -> IgPostData:
         """
-        Uploads a video to Instagram with retry logic.
+        Uploads a video  to Instagram.
+
+        Args:
+            (file_path): Path to the media file.
+            caption (str, optional): Caption for the post (default: "").
+            location (Location, optional): Location object for tagging (default: None).
+
+        Returns:
+            IgPostData: An IgPostData object representing the uploaded media.
+
+        Raises:
+            FileNotFoundError: If the media file is not found.
+            ValueError: If the file format is not supported.
+            MediaError: If there's an error during the upload process.
+            ClientError: If there's a general Instagrapi client error.
         """
 
         if not os.path.isfile(video_path):
@@ -148,7 +174,7 @@ class IgPostManager:
                 extra_data = {}
                 if location:
                     extra_data["location"] = self.client.location_build(location)
-                
+
                 media = self.client.video_upload(
                     video_path, caption=caption, extra_data=extra_data
                 )
@@ -158,9 +184,9 @@ class IgPostManager:
                     media_id=media.id,
                     media_type=media.media_type,
                     product_type=media.product_type,
-                    caption=caption,  
+                    caption=caption,
                     timestamp=media.taken_at,
-                    media_url=media.thumbnail_url,  
+                    media_url=media.thumbnail_url,
                     location_pk=location.pk if location else None,  # Extract location ID
                     location_name=location.name if location else None,  # Extract location name
                     like_count=media.like_count,
@@ -183,7 +209,21 @@ class IgPostManager:
                      paths: List[str], caption: str = "", location: Location = None
                      ) -> List[IgPostData]:
         """
-        Uploads a carousel/album post to Instagram with retry logic and file validation.
+        Uploads an album to Instagram.
+
+        Args:
+            (file_path): Path to the media file.
+            caption (str, optional): Caption for the post (default: "").
+            location (Location, optional): Location object for tagging (default: None).
+
+        Returns:
+            IgPostData: An IgPostData object representing the uploaded media.
+
+        Raises:
+            FileNotFoundError: If the media file is not found.
+            ValueError: If the file format is not supported.
+            MediaError: If there's an error during the upload process.
+            ClientError: If there's a general Instagrapi client error.
         """
 
         # File existence and extension validation
@@ -211,11 +251,11 @@ class IgPostManager:
                     media_id=media.id,
                     media_type=media.media_type,
                     product_type=media.product_type,
-                    caption=caption,  
-                    timestamp=media.taken_at,  
+                    caption=caption,
+                    timestamp=media.taken_at,
                     media_url=media.thumbnail_url,  # You might need to adjust this for albums
-                    location_pk=location.pk if location else None,  
-                    location_name=location.name if location else None,  
+                    location_pk=location.pk if location else None,
+                    location_name=location.name if location else None,
                     like_count=0,
                     comment_count=0,
                     is_album=True,
@@ -238,28 +278,29 @@ class IgPostManager:
                     video_path: str, caption: str = "", location: Location = None
                     ) -> IgPostData:
         """
-        Uploads a Reel as it is to Instagram.
+        Uploads a reel to Instagram.
 
         Args:
-            video_path (str): The path to the video file.
-            caption (str, optional): The caption for the video/Reel. Defaults to "".
-                                        caption already includes tags and mentions.
-            location (Location object, optional): The location object to tag in the post. Defaults to None.
+            (file_path): Path to the media file.
+            caption (str, optional): Caption for the post (default: "").
+            location (Location, optional): Location object for tagging (default: None).
 
         Returns:
-            Media: An instagrapi object containing information about the uploaded video/Reel.
+            IgPostData: An IgPostData object representing the uploaded media.
 
         Raises:
-            FileNotFoundError: If the video file is not found.
-            ClientError: If there's an error from the Instagram API.
+            FileNotFoundError: If the media file is not found.
+            ValueError: If the file format is not supported.
+            MediaError: If there's an error during the upload process.
+            ClientError: If there's a general Instagrapi client error.
         """
-        
+
         # Check if file exists
         if not os.path.isfile(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
 
         # File extension validation
-        valid_extensions = [".mp4"]  
+        valid_extensions = [".mp4"]
         if not video_path.lower().endswith(tuple(valid_extensions)):
             raise ValueError(
                 "Invalid file format. Only MP4 files are supported for reels."
@@ -268,7 +309,7 @@ class IgPostManager:
         retries = 0
         while retries < self.MAX_RETRIES:
             try:
-        
+
                 media = self.client.clip_upload(video_path, caption=caption, location=location)
                 print("reel outcome: ---------------------------------------------------------------------------------")
                 print(media)
@@ -299,8 +340,6 @@ class IgPostManager:
         raise e  # Raise the final exception after retries are exhausted
 
 
-
-
     def upload_reel_with_music(self,
                                 path: str,
                                 caption: str,
@@ -310,22 +349,23 @@ class IgPostManager:
         #### This Method is not working - but needs to be reviewed through the Instagrapi community
         """
         Uploads a reel to Instagram with a specified music track and an optional caption.
-           using instagrapi method:
-           clip_upload_as_reel_with_music(path: Path, caption: str, track: Track, extra_data: Dict = {})
+        (This method is not currently working and needs review.)
 
         Args:
-            video_path (str): The path to the video file.
-            music_path (str): The path to the music file (supported formats: .mp3, .m4a).
-            caption (str, optional): The caption for the video. Defaults to "".
+            path (str): The path to the video file.
+            caption (str, optional): The caption for the reel. Defaults to "".
+            track (Track): The Track object representing the music to use.
             location (Location, optional): The location to tag in the post. Defaults to None.
 
         Returns:
-            Media: An instagrapi object containing information about the uploaded post.
+            IgPostData: An IgPostData object representing the uploaded reel.
 
         Raises:
-            FileNotFoundError: If the video or music file is not found.
-            ClientError: If there's an error with the Instagram client.
-            Exception: If there is an error during the upload process.
+            FileNotFoundError: If the video file is not found.
+            TypeError: If `track` is not a `Track` object.
+            ValueError: If the video file format is not supported (only .mp4).
+            ClientError: If there's an error from the Instagram API.
+            MediaError: If there's an error uploading the media.
         """
 
         # Check if file exists
@@ -354,16 +394,16 @@ class IgPostManager:
                     media_id=media.id,
                     media_type=media.media_type,
                     product_type=media.product_type,
-                    caption=caption,  
+                    caption=caption,
                     timestamp=media.taken_at,
-                    media_url=media.thumbnail_url,  
+                    media_url=media.thumbnail_url,
                     location_pk=location.pk if location else None,  # Extract location ID
                     location_name=location.name if location else None,  # Extract location name
                     like_count=media.like_count,
                     comment_count=media.comment_count
                 )
 
-        
+
                 return ig_reel_post  # Return the IgPostData object
             except (ClientError, MediaError) as e:
                 logger.warning(
@@ -376,4 +416,5 @@ class IgPostManager:
             f"Failed to upload reel with music after {self.MAX_RETRIES} retries."
         )
         raise e  # Raise the final exception after retries are exhausted
+
 

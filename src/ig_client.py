@@ -1,7 +1,10 @@
 """
-ig_client.py:
-Manages the connection to Instagram using Instagrapi, loading the saved session for easy interaction.
+This module manages the connection to Instagram using Instagrapi. It provides a class,
+IgClient, which handles loading saved sessions, user ID retrieval, and logging into 
+Instagram. The module uses environment variables for storing credentials and leverages 
+logging for better feedback.
 """
+
 import os
 import logging
 from typing import Optional, Union
@@ -15,7 +18,16 @@ logger = logging.getLogger(__name__)
 class IgClient:
     """
     A class to manage Instagram client operations using a saved session.
+
+    Attributes:
+        client (instagrapi.Client): The Instagrapi Client object for interacting with Instagram.
+        session_file (str): The filename of the saved session file.
+
+    Raises:
+        FileNotFoundError: If the specified session file does not exist.
+        ClientError: If there's an error loading the session file.
     """
+
     
     def __init__(self, session_file: str = "cl_ig.pkl") -> None:
         """
@@ -43,17 +55,17 @@ class IgClient:
 
     def get_user_id(self, username: str) -> Optional[int]:
         """
-        Fetch the user ID for a given Instagram username.
+        Fetches the user ID (pk) for a given Instagram username.
 
         Args:
-            username (str): The Instagram username to fetch the user ID for.
+            username (str): The Instagram username.
 
         Returns:
-            Optional[int]: The user's ID (primary key) if found, None otherwise.
+            Optional[int]: The user's ID if found, None if not found.
 
         Raises:
-            UserNotFound: If the specified username does not exist.
-            ClientError: For other Instagram client-related errors.
+            UserNotFound: If the username doesn't exist.
+            ClientError: For other Instagrapi-related errors.
         """
         try:
             user_info = self.client.user_info_by_username(username)
@@ -68,19 +80,19 @@ class IgClient:
 
     def login(self, username: Optional[str] = None, password: Optional[str] = None) -> None:
         """
-        Authenticates with Instagram and saves the session.
+        Logs into Instagram with the provided credentials and saves the session.
+
+        If username or password are not provided, they are retrieved from the environment variables 
+        IG_JK_user and IG_JK_psw, respectively.
 
         Args:
-            username (str, optional): The Instagram username. If not provided, 
-                                      it will be retrieved from the environment variable 'IG_JK_user'.
-            password (str, optional): The Instagram password. If not provided, 
-                                      it will be retrieved from the environment variable 'IG_JK_psw'.
+            username (str, optional): Your Instagram username.
+            password (str, optional): Your Instagram password.
 
         Raises:
-            ValueError: If username and/or password are not provided and cannot be retrieved 
-                        from environment variables.
-            ClientLoginRequired: If login fails due to invalid credentials.
-            ClientError: For other Instagram client-related errors.
+            ValueError: If username and/or password are not provided and are not set in environment variables.
+            ClientLoginRequired: If the login fails (e.g., due to invalid credentials).
+            ClientError: For other Instagrapi-related errors.
         """
 
         if not username:
