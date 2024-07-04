@@ -18,11 +18,10 @@ from instagrapi.exceptions import (
     ClientJSONDecodeError,
     ClientConnectionError,
     ClientNotFoundError,
-)
+    UserNotFound
+    )
 from ig_data import IgPostData
 
-MAX_RETRIES = 3
-RETRY_DELAY = 5
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 class IgUtils:
     """Utility class for Instagram interactions and data management."""
-    
+
     MAX_RETRIES = 3
     RETRY_DELAY = 5
 
@@ -75,7 +74,7 @@ class IgUtils:
     def get_top_locations_by_name(self, name: str, limit: int = 10, max_retries: int = 3) -> list[Location]:
         """Gets the top matching locations for a query."""
         locations = self.get_locations_by_name(name, max_retries)
-        return locations[:limit]  
+        return locations[:limit]
 
 
     def location_to_dict(self, location: Location) -> dict:
@@ -110,13 +109,44 @@ class IgUtils:
         return self.client.search_music(author)
 
 
-    def get_track_by_id(self, track_pk: str) -> Track | None: 
+    def get_track_by_id(self, track_pk: str) -> Track | None:
         """Gets a Track object by its ID (pk)."""
         try:
             return self.client.track_info_by_canonical_id(track_pk)
         except ClientError as e:
             logger.error(f"Error fetching track with ID {track_pk}: {e}")
             return None
+
+
+
+    def get_user_id_from_username(self, username: str) -> Optional[int]:
+        """
+        Gets a user's ID from their username.
+
+        Args:
+            username (str): The username of the user.
+
+        Returns:
+            Optional[int]: The user ID (pk) if found, otherwise None.
+        """
+
+        try:
+            user_info = self.client.client.user_info_by_username(username)
+            return user_info.pk
+        except UserNotFound:
+            logger.error(f"User '{username}' not found.")
+            return None
+        except ClientError as e:
+            logger.error(f"Error getting user ID for '{username}': {e}")
+            return None
+        except Exception as e:
+            logger.error(f"An error occurred: {e}")
+            return None
+
+# ......................................
+# ADITIONAL METHODS
+# ......................................
+
 
 def create_post_dataframe(posts: List[IgPostData]) -> pd.DataFrame:
     """Creates a Pandas DataFrame from a list of IgPostData objects."""
@@ -143,6 +173,10 @@ def correct_orientation(image_path: Path) -> None:
         image_path: The path to the image file.
     """
 
+    ##___________________
+    # ### Improve by checking it is a photo file, otherwise return nd continue
+    # -------------------------------------------------------------------------------------
+
     try:
         img = Image.open(image_path)
 
@@ -157,8 +191,8 @@ def correct_orientation(image_path: Path) -> None:
                 img = img.rotate(270, expand=True)
             elif orientation == 8:
                 img = img.rotate(90, expand=True)
-            img.save(image_path)  
+            img.save(image_path)
         else:
-            logging.warning(f"No EXIF orientation data found in image: {image_path}") 
+            logging.warning(f"No EXIF orientation data found in image: {image_path}")
     except (IOError, OSError) as e:
         logging.error(f"Error opening or processing image: {image_path}, Error: {e}")

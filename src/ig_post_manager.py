@@ -14,9 +14,8 @@ import os
 import time
 import datetime
 import logging
-import pandas as pd
-from typing import List, Dict, Any, Optional
-from instagrapi import Client
+
+from typing import List, Any, Optional
 from instagrapi.exceptions import ClientError, MediaError
 from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker, Media, Track
 from ig_client import IgClient
@@ -31,7 +30,7 @@ logger = logging.getLogger(__name__)
 class IgPostManager:
     """Handles Instagram post operations using the IgClient."""
     
-    MAX_RETRIES = 3  # Maximum number of retries
+    MAX_RETRIES = 1  # Maximum number of retries
     RETRY_DELAY = 5  # Delay between retries in seconds
 
 

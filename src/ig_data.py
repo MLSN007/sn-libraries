@@ -1,12 +1,22 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List
-from instagrapi.types import Location, Media
+from typing import Optional, List, Dict, Any
+from instagrapi.types import (
+    StoryMention,
+    StoryMedia,
+    StoryLink,
+    StoryHashtag,
+    StoryLocation,
+    StorySticker,
+    UserShort,
+    HttpUrl
+)
+from instagrapi.story import StoryBuilder
 
 @dataclass
 class IgPostData:
     """represents and Instagram post or reel with relevant data
-    
+
     Media types:
         Photo - When media_type=1
         Video - When media_type=2 and product_type=feed
@@ -16,7 +26,7 @@ class IgPostData:
     """
     media_id: str
     media_type: int
-    product_type: Optional[str] 
+    product_type: Optional[str]
     caption: str                        # complete with hashtags and mentions
     timestamp: datetime
     media_url: Optional[str] = None  # Might not be relevant for albums
@@ -28,18 +38,29 @@ class IgPostData:
     album_media_ids: Optional[List[str]] = None  # List of media IDs in the album
     album_media_urls: Optional[List[str]] = None  # List of media URLs in the album
 
+@dataclass
+class IgStData:
+    """Represents essential data for an Instagram story (reel)."""
+
+    # Parameters extracted from StoryObject (no default values)
+    pk: int
+    id: str
+    code: str
+    taken_at: datetime
+
+    # User-provided parameters (some have default values)
+    reel_url: str
+    caption: str = ""
+    mentions: Optional[List[str]] = field(default_factory=list)
+    location_id: Optional[int] = None
+    hashtags: Optional[List[str]] = field(default_factory=list)
+    link: Optional[str] = None
 
 
-    @dataclass
-    class IgStData:
-        """Represents data for an Instagram story."""
-        media_id: str  # This will be the ID of the story item itself
-        media_type: int  # 1 for image, 2 for video
-        caption: str
-        timestamp: datetime
-        media_url: Optional[str] = None  # URL for image or video thumbnail (if applicable)
-        # Add other relevant attributes as needed (e.g., mentions, links, stickers)
+    # Additional fields you might want to add
+    # e.g., is_paid_partnership: bool = False
+    #       imported_taken_at: Optional[datetime] = None
 
 
 
-    # Add other relevant attributes as needed (avoid complex objects)
+# Add other relevant attributes as needed (avoid complex objects)
