@@ -3,3 +3,4 @@ config.py
 ig_location_tests.ipynb
 ig_JK_config.json
 ig_create_json_config.py
+JK_ig_session.pkl
