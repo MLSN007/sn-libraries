@@ -1,7 +1,0 @@
-README.md
-setup.py
-src/sn_libraries.egg-info/PKG-INFO
-src/sn_libraries.egg-info/SOURCES.txt
-src/sn_libraries.egg-info/dependency_links.txt
-src/sn_libraries.egg-info/requires.txt
-src/sn_libraries.egg-info/top_level.txt
