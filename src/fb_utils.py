@@ -65,19 +65,20 @@ class FbUtils:
         
         return None  # Return None if the ID couldn't be found
 
-    def get_group_info(self, group_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves basic information about a Facebook Group by its ID.
+    def get_group_info(self, group_id: str, fields: str = "name,description,icon") -> Dict[str, Any]:
+        """Retrieves basic information about a Facebook group.
 
         Args:
             group_id (str): The ID of the Facebook group.
+            fields (str, optional): Comma-separated list of fields to include (e.g., "name,description,icon"). Defaults to "name,description,icon".
 
         Returns:
-            Optional[Dict[str, Any]]: A dictionary containing group information if found, or None if not found or an error occurs.
+            Dict[str, Any]: A dictionary containing the group's information, or an empty dictionary if an error occurs.
         """
-        url = f"https://graph.facebook.com/v12.0/{group_id}?fields=name,description,privacy&access_token={self.api_client.access_token}"
+        graph = self.api_client.get_graph_api_object()
         try:
-            response = requests.get(url)
-            response.raise_for_status()  # Raise an exception for bad responses
-            return response.json()  # Return the JSON response containing group info
-        except requests.RequestException:
-            return None  # Return None if an error occurs
+            group_data = graph.get_object(id=group_id, fields=fields)
+            return group_data
+        except facebook.GraphAPIError as e:
+            print(f"Error retrieving group info: {e}")
+            return {}

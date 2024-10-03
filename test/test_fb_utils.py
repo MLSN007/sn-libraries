@@ -42,16 +42,15 @@ class TestFbUtils(unittest.TestCase):
         result = FbUtils.get_page_id("nonexistent_page")
         self.assertIsNone(result)
 
-    @patch('fb_utils.requests.get')
-    def test_get_group_info_success(self, mock_get):
-        # Mock the response
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+    @patch('fb_utils.FbApiClient.get_graph_api_object')
+    def test_get_group_info_success(self, mock_get_graph_api_object):
+        mock_graph = MagicMock()
+        mock_graph.get_object.return_value = {
             "name": "Test Group",
             "description": "A test group",
             "privacy": "CLOSED"
         }
-        mock_get.return_value = mock_response
+        mock_get_graph_api_object.return_value = mock_graph
 
         result = self.fb_utils.get_group_info("123456789")
         self.assertEqual(result, {
@@ -60,13 +59,14 @@ class TestFbUtils(unittest.TestCase):
             "privacy": "CLOSED"
         })
 
-    @patch('fb_utils.requests.get')
-    def test_get_group_info_failure(self, mock_get):
-        # Mock a failed response
-        mock_get.side_effect = requests.RequestException()
+    @patch('fb_utils.FbApiClient.get_graph_api_object')
+    def test_get_group_info_failure(self, mock_get_graph_api_object):
+        mock_graph = MagicMock()
+        mock_graph.get_object.side_effect = facebook.GraphAPIError("Error")
+        mock_get_graph_api_object.return_value = mock_graph
 
         result = self.fb_utils.get_group_info("123456789")
-        self.assertIsNone(result)
+        self.assertEqual(result, {})
 
 if __name__ == '__main__':
     unittest.main()
