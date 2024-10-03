@@ -64,3 +64,20 @@ class FbUtils:
             pass  # Handle errors (page not found, ID not in expected format, etc.)
         
         return None  # Return None if the ID couldn't be found
+
+    def get_group_info(self, group_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves basic information about a Facebook Group by its ID.
+
+        Args:
+            group_id (str): The ID of the Facebook group.
+
+        Returns:
+            Optional[Dict[str, Any]]: A dictionary containing group information if found, or None if not found or an error occurs.
+        """
+        url = f"https://graph.facebook.com/v12.0/{group_id}?fields=name,description,privacy&access_token={self.api_client.access_token}"
+        try:
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an exception for bad responses
+            return response.json()  # Return the JSON response containing group info
+        except requests.RequestException:
+            return None  # Return None if an error occurs
