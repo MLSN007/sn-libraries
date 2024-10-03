@@ -8,16 +8,13 @@ Classes:
         
 """
 
-
-
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import requests
 from bs4 import BeautifulSoup
 import facebook
 
 from fb_api_client import FbApiClient
-
 
 
 logging.basicConfig(level=logging.DEBUG)  # Set the logging level to DEBUG
@@ -33,10 +30,8 @@ class FbUtils:
         api_client (FbApiClient): An instance of the FbApiClient for making API requests.
     """
 
-
     def __init__(self, api_client: "FbApiClient") -> None:
         self.api_client = api_client
-
 
     @staticmethod
     def get_page_id(page_name: str) -> Optional[str]:
@@ -51,7 +46,7 @@ class FbUtils:
 
         url = f"https://www.facebook.com/{page_name}"
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)  # Add timeout of 10 seconds
             response.raise_for_status()  # Raise an exception for bad responses
             soup = BeautifulSoup(response.text, "html.parser")
 
@@ -62,15 +57,18 @@ class FbUtils:
                 return user_id
         except (requests.RequestException, AttributeError, IndexError):
             pass  # Handle errors (page not found, ID not in expected format, etc.)
-        
+
         return None  # Return None if the ID couldn't be found
 
-    def get_group_info(self, group_id: str, fields: str = "name,description,icon") -> Dict[str, Any]:
+    def get_group_info(
+        self, group_id: str, fields: str = "name,description,icon"
+    ) -> Dict[str, Any]:
         """Retrieves basic information about a Facebook group.
 
         Args:
             group_id (str): The ID of the Facebook group.
-            fields (str, optional): Comma-separated list of fields to include (e.g., "name,description,icon"). Defaults to "name,description,icon".
+            fields (str, optional): Comma-separated list of fields to include
+            (e.g., "name,description,icon"). Defaults to "name,description,icon".
 
         Returns:
             Dict[str, Any]: A dictionary containing the group's information, or an empty dictionary if an error occurs.
