@@ -5,7 +5,7 @@ setup(
     version='0.1.0',
 
     # Package discovery and structure
-    packages=find_namespace_packages(where='src'),
+    packages=find_namespace_packages(where='src') + find_namespace_packages(where='test'),  # Include 'test' folder
     package_dir={'': 'src'},
 
     # Dependencies (with version specifiers for stability)

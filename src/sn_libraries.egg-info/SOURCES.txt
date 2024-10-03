@@ -6,3 +6,4 @@ src/sn_libraries.egg-info/dependency_links.txt
 src/sn_libraries.egg-info/entry_points.txt
 src/sn_libraries.egg-info/requires.txt
 src/sn_libraries.egg-info/top_level.txt
+test/test_fb_utils.py
