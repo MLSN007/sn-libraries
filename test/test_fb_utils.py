@@ -13,7 +13,14 @@ class TestFbUtils(unittest.TestCase):
         self.fb_utils = FbUtils(self.mock_api_client)
         
         # Print the signature of the get_group_info method
-        print(inspect.signature(self.fb_utils.get_group_info))
+        print("Method signature:", inspect.signature(self.fb_utils.get_group_info))
+        
+        # Print the source code of the get_group_info method
+        print("Method source:")
+        print(inspect.getsource(self.fb_utils.get_group_info))
+        
+        # Print the file path of the FbUtils class
+        print("FbUtils file path:", inspect.getfile(FbUtils))
 
     @patch('fb_utils.requests.get')
     def test_get_page_id_success(self, mock_get):
