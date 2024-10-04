@@ -17,6 +17,7 @@ Requires-Dist: instagrapi~=2.1.2
 Requires-Dist: hikerapi
 Requires-Dist: requests
 Requires-Dist: beautifulsoup4~=4.12.3
+Requires-Dist: facebook-scraper
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: coverage; extra == "dev"

@@ -1,8 +1,7 @@
 """A module for scraping Facebook pages using the facebook-scraper library."""
 
-import re
-from facebook_scraper import get_posts, get_profile
 from typing import List, Dict, Any, Optional
+from facebook_scraper import get_posts, get_profile
 
 
 class FbScraper:
