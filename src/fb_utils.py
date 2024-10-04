@@ -81,41 +81,6 @@ class FbUtils:
             print(f"Error retrieving group info: {e}")
             return {}
 
-    @staticmethod
-    def get_group_id(group_name):
-        """
-        Get the Facebook group ID from the group name using web scraping.
 
-        Args:
-            group_name (str): The name of the Facebook group.
-
-        Returns:
-            str: The group ID if found, None otherwise.
-        """
-        url = f"https://www.facebook.com/groups/{group_name}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-
-        try:
-            response = requests.get(url, headers=headers, timeout=30)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            # Look for the group ID in the HTML
-            group_id_match = re.search(r'"groupID":"(\d+)"', str(soup))
-            if group_id_match:
-                return group_id_match.group(1)
-
-            # If not found, try an alternative method
-            entity_id_match = re.search(r"entity_id=(\d+)", str(soup))
-            if entity_id_match:
-                return entity_id_match.group(1)
-
-            return None
-        except requests.RequestException as e:
-            print(f"Error fetching group ID: {e}")
-            return None
 
     # ... rest of the class ...

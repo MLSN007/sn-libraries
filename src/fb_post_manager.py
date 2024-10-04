@@ -229,4 +229,194 @@ class FbPostManager:
                 print(f"Error publishing post with photo: {e.message}")
                 return None
 
+    def publish_multi_photo_post(self, page_id: str, message: str, photo_paths: List[str]) -> Optional[Dict]:
+        """Publishes a post with multiple photos to a Facebook Page.
+
+        Args:
+            page_id (str): The ID of the page to post to.
+            message (str): The text content of the post.
+            photo_paths (List[str]): A list of file paths to the photos to be uploaded.
+
+        Returns:
+            Optional[Dict]: A dictionary containing post details if successful, 
+                or None if an error occurs.
+        """
+        graph = self.api_client.get_graph_api_object()
+        try:
+            # Prepare the photo attachments
+            photo_attachments = []
+            for photo_path in photo_paths:
+                with open(photo_path, 'rb') as photo_file:
+                    photo_attachments.append(('source', photo_file))
+
+            # Create the post with multiple photos
+            post = graph.put_object(
+                parent_object=page_id,
+                connection_name="photos",
+                message=message,
+                attached_media=photo_attachments
+            )
+            print(f"Multi-photo post published successfully. Post ID: {post['id']}")
+            return post
+        except facebook.GraphAPIError as e:
+            print(f"Error publishing multi-photo post: {e.message}")
+            return None
+
+    def publish_video_post(self, page_id: str, message: str, video_path: str, title: Optional[str] = None) -> Optional[Dict]:
+        """Publishes a video post to a Facebook Page.
+
+        Args:
+            page_id (str): The ID of the page to post to.
+            message (str): The text content of the post.
+            video_path (str): The file path to the video to be uploaded.
+            title (Optional[str]): An optional title for the video.
+
+        Returns:
+            Optional[Dict]: A dictionary containing post details if successful, 
+                or None if an error occurs.
+        """
+        graph = self.api_client.get_graph_api_object()
+        try:
+            # Open the video file
+            with open(video_path, 'rb') as video_file:
+                # Create the video post
+                video_data = {
+                    'message': message,
+                    'source': video_file
+                }
+                if title:
+                    video_data['title'] = title
+
+                post = graph.put_object(
+                    parent_object=page_id,
+                    connection_name="videos",
+                    **video_data
+                )
+            print(f"Video post published successfully. Post ID: {post['id']}")
+            return post
+        except facebook.GraphAPIError as e:
+            print(f"Error publishing video post: {e.message}")
+            return None
+        except IOError as e:
+            print(f"Error opening video file: {e}")
+            return None
+
+    def publish_reel(self, page_id: str, message: str, video_path: str, title: Optional[str] = None) -> Optional[Dict]:
+        """Publishes a reel to a Facebook Page.
+
+        Args:
+            page_id (str): The ID of the page to post the reel to.
+            message (str): The text content of the reel post.
+            video_path (str): The file path to the video to be uploaded as a reel.
+            title (Optional[str]): An optional title for the reel.
+
+        Returns:
+            Optional[Dict]: A dictionary containing reel post details if successful, 
+                or None if an error occurs.
+        """
+        graph = self.api_client.get_graph_api_object()
+        try:
+            # Open the video file
+            with open(video_path, 'rb') as video_file:
+                # Create the reel post
+                reel_data = {
+                    'message': message,
+                    'source': video_file,
+                    'is_reel': True  # This parameter specifies that it's a reel
+                }
+                if title:
+                    reel_data['title'] = title
+
+                reel = graph.put_object(
+                    parent_object=page_id,
+                    connection_name="videos",
+                    **reel_data
+                )
+            print(f"Reel published successfully. Reel ID: {reel['id']}")
+            return reel
+        except facebook.GraphAPIError as e:
+            print(f"Error publishing reel: {e.message}")
+            return None
+        except IOError as e:
+            print(f"Error opening video file: {e}")
+            return None
+
+    def share_public_post(self, page_id: str, post_id: str, message: Optional[str] = None) -> Optional[Dict]:
+        """Shares a public post from another user on a Facebook Page.
+
+        Args:
+            page_id (str): The ID of the page to share the post on.
+            post_id (str): The ID of the public post to be shared.
+            message (Optional[str]): An optional message to accompany the shared post.
+
+        Returns:
+            Optional[Dict]: A dictionary containing shared post details if successful, 
+                or None if an error occurs.
+        """
+        graph = self.api_client.get_graph_api_object()
+        try:
+            shared_post = graph.put_object(
+                parent_object=page_id,
+                connection_name="feed",
+                link=f"https://www.facebook.com/{post_id}",
+                message=message
+            )
+            print(f"Post shared successfully. Shared post ID: {shared_post['id']}")
+            return shared_post
+        except facebook.GraphAPIError as e:
+            print(f"Error sharing post: {e.message}")
+            return None
+
+    def share_public_reel(self, page_id: str, reel_id: str, message: Optional[str] = None) -> Optional[Dict]:
+        """Shares a public reel from another user on a Facebook Page's feed.
+
+        Args:
+            page_id (str): The ID of the page to share the reel on.
+            reel_id (str): The ID of the public reel to be shared.
+            message (Optional[str]): An optional message to accompany the shared reel.
+
+        Returns:
+            Optional[Dict]: A dictionary containing shared reel details if successful, 
+                or None if an error occurs.
+        """
+        graph = self.api_client.get_graph_api_object()
+        try:
+            shared_reel = graph.put_object(
+                parent_object=page_id,
+                connection_name="feed",
+                link=f"https://www.facebook.com/reel/{reel_id}",
+                message=message
+            )
+            print(f"Reel shared successfully. Shared post ID: {shared_reel['id']}")
+            return shared_reel
+        except facebook.GraphAPIError as e:
+            print(f"Error sharing reel: {e.message}")
+            return None
+
+    def share_public_video(self, page_id: str, video_id: str, message: Optional[str] = None) -> Optional[Dict]:
+        """Shares a public video from another user on a Facebook Page's feed.
+
+        Args:
+            page_id (str): The ID of the page to share the video on.
+            video_id (str): The ID of the public video to be shared.
+            message (Optional[str]): An optional message to accompany the shared video.
+
+        Returns:
+            Optional[Dict]: A dictionary containing shared video details if successful, 
+                or None if an error occurs.
+        """
+        graph = self.api_client.get_graph_api_object()
+        try:
+            shared_video = graph.put_object(
+                parent_object=page_id,
+                connection_name="feed",
+                link=f"https://www.facebook.com/watch/?v={video_id}",
+                message=message
+            )
+            print(f"Video shared successfully. Shared post ID: {shared_video['id']}")
+            return shared_video
+        except facebook.GraphAPIError as e:
+            print(f"Error sharing video: {e.message}")
+            return None
+
 # ... (Other methods for publishing multi-photo and video posts will be added later)
