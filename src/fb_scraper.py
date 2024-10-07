@@ -96,13 +96,10 @@ class FbScraper:
             Optional[str]: The page ID if found, None otherwise.
         """
         try:
-            # Fetch the first post from the page
             posts = list(get_posts(page_name, pages=1))
             if posts:
-                # The page ID is typically part of the post ID
                 post_id = posts[0].get("post_id")
                 if post_id:
-                    # Page ID is usually the part before the underscore
                     return post_id.split("_")[0]
             return None
         except Exception as e:
@@ -120,17 +117,13 @@ class FbScraper:
             Optional[str]: The group ID if found, None otherwise.
         """
         try:
-            # If a full URL is provided, extract the group name
             if "facebook.com/groups/" in group_name:
                 group_name = group_name.split("facebook.com/groups/")[-1].split("/")[0]
 
-            # Fetch the first post from the group
             posts = list(get_posts(group=group_name, pages=1))
             if posts:
-                # The group ID is typically part of the post URL
                 post_url = posts[0].get("post_url")
                 if post_url:
-                    # Try to extract the group ID from the URL
                     match = re.search(r"facebook\.com/groups/(\d+)", post_url)
                     if match:
                         return match.group(1)
