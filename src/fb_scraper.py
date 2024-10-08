@@ -1,75 +1,60 @@
-"""A module for scraping Facebook pages using the facebook-scraper library."""
+"""A module for scraping Facebook pages using Selenium."""
 
 from typing import List, Dict, Any, Optional
-from facebook_scraper import get_posts, get_profile
-
+import time
+import re
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 class FbScraper:
-    """A class for scraping Facebook pages using the facebook-scraper library.
+    """A class for scraping Facebook pages using Selenium.
 
     This class provides methods to retrieve recent posts from a Facebook page
-    without requiring API access.
+    and extract user, page, and group IDs.
 
     Attributes:
-        None
+        driver: The Selenium WebDriver instance.
     """
+
+    def __init__(self):
+        """Initialize the FbScraper with a Selenium WebDriver."""
+        # Specify the path to your ChromeDriver executable
+        chrome_driver_path = r"C:\Users\manue\chrome-win64\chromedriver.exe"
+        
+        # Create a Service object
+        service = Service(chrome_driver_path)
+        
+        # Initialize the Chrome WebDriver with the Service object
+        self.driver = webdriver.Chrome(service=service)
+        self.driver.implicitly_wait(10)  # Wait up to 10 seconds for elements to appear
+
+    def __del__(self):
+        """Close the browser when the FbScraper instance is destroyed."""
+        if hasattr(self, 'driver'):
+            self.driver.quit()
 
     @staticmethod
     def get_latest_posts(page_id: str, num_posts: int = 4) -> List[Dict[str, Any]]:
         """Retrieves the latest posts from a Facebook Page using web scraping.
+
+        This method is left as a placeholder. Implement Selenium-based scraping
+        for posts if needed.
 
         Args:
             page_id (str): The ID or username of the Facebook Page.
             num_posts (int, optional): The number of posts to retrieve (default: 4).
 
         Returns:
-            List[Dict[str, Any]]: A list of dictionaries, each representing a post
-                with the following keys: 'post_id', 'post_date', 'post_url', 'reactions',
-                'comments', 'shares'. Returns an empty list if an error occurs.
+            List[Dict[str, Any]]: A list of dictionaries, each representing a post.
         """
-        try:
-            posts = []
-            for post in get_posts(page_id, pages=num_posts):
-                post_data = {
-                    "post_id": post.get("post_id"),
-                    "post_date": post.get("time"),
-                    "post_url": post.get("post_url"),
-                    "reactions": post.get("likes"),
-                    "comments": post.get("comments"),
-                    "shares": post.get("shares"),
-                }
-                posts.append(post_data)
+        # Implement Selenium-based post scraping here if needed
+        return []
 
-            return posts[
-                :num_posts
-            ]  # Ensure we only return the requested number of posts
-        except Exception as e:
-            print(f"Error scraping posts from page {page_id}: {e}")
-            return []
-
-    @staticmethod
-    def format_post_data(posts: List[Dict[str, Any]]) -> str:
-        """Formats the scraped post data into a readable string.
-
-        Args:
-            posts (List[Dict[str, Any]]): The list of post dictionaries returned by get_latest_posts.
-
-        Returns:
-            str: A formatted string containing the post information.
-        """
-        formatted_output = ""
-        for post in posts:
-            formatted_output += f"Post ID: {post['post_id']}\n"
-            formatted_output += f"Date Posted: {post['post_date']}\n"
-            formatted_output += f"Post URL: {post['post_url']}\n"
-            formatted_output += f"Reactions: {post['reactions']}\n"
-            formatted_output += f"Comments: {post['comments']}\n"
-            formatted_output += f"Shares: {post['shares']}\n"
-            formatted_output += "-" * 40 + "\n"
-        return formatted_output
-
-    @staticmethod
-    def get_user_id(username: str) -> Optional[str]:
+    def get_user_id(self, username: str) -> Optional[str]:
         """Attempts to retrieve the user ID for a given public Facebook username.
 
         Args:
@@ -79,14 +64,28 @@ class FbScraper:
             Optional[str]: The user ID if found, None otherwise.
         """
         try:
-            profile = get_profile(username)
-            return profile.get("id")
+            self.driver.get(f"https://www.facebook.com/{username}")
+            time.sleep(2)  # Wait for any redirects or JavaScript to load
+
+            # Look for the user ID in the page source
+            page_source = self.driver.page_source
+            match = re.search(r'"userID":"(\d+)"', page_source)
+            if match:
+                return match.group(1)
+
+            # If not found, try an alternative method
+            entity_id = self.driver.find_element(By.XPATH, "//meta[@property='al:android:url']")
+            if entity_id:
+                match = re.search(r'fb://profile/(\d+)', entity_id.get_attribute('content'))
+                if match:
+                    return match.group(1)
+
+            return None
         except Exception as e:
             print(f"Error retrieving user ID for {username}: {e}")
             return None
 
-    @staticmethod
-    def get_page_id(page_name: str) -> Optional[str]:
+    def get_page_id(self, page_name: str) -> Optional[str]:
         """Attempts to retrieve the page ID for a given Facebook page name.
 
         Args:
@@ -96,18 +95,33 @@ class FbScraper:
             Optional[str]: The page ID if found, None otherwise.
         """
         try:
-            posts = list(get_posts(page_name, pages=1))
-            if posts:
-                post_id = posts[0].get("post_id")
-                if post_id:
-                    return post_id.split("_")[0]
-            return None
+            self.driver.get(f"https://www.facebook.com/{page_name}")
+            time.sleep(2)  # Wait for any redirects or JavaScript to load
+
+            # Look for the page ID in the page source
+            page_source = self.driver.page_source
+            match = re.search(r'"pageID":"(\d+)"', page_source)
+            if match:
+                return match.group(1)
+
+            # If not found, try an alternative method
+            entity_id = self.driver.find_element(By.XPATH, "//meta[@property='al:android:url']")
+            if entity_id:
+                content = entity_id.get_attribute('content')
+                match = re.search(r'/(\d+)$', content)
+                if match:
+                    page_id = match.group(1)
+                else:
+                    page_id = None
+            except NoSuchElementException:
+                page_id = None
+
+            return page_id
         except Exception as e:
             print(f"Error retrieving page ID for {page_name}: {e}")
             return None
 
-    @staticmethod
-    def get_group_id(group_name: str) -> Optional[str]:
+    def get_group_id(self, group_name: str) -> Optional[str]:
         """Attempts to retrieve the group ID for a given Facebook group name.
 
         Args:
@@ -118,15 +132,25 @@ class FbScraper:
         """
         try:
             if "facebook.com/groups/" in group_name:
-                group_name = group_name.split("facebook.com/groups/")[-1].split("/")[0]
+                group_url = group_name
+            else:
+                group_url = f"https://www.facebook.com/groups/{group_name}"
 
-            posts = list(get_posts(group=group_name, pages=1))
-            if posts:
-                post_url = posts[0].get("post_url")
-                if post_url:
-                    match = re.search(r"facebook\.com/groups/(\d+)", post_url)
-                    if match:
-                        return match.group(1)
+            self.driver.get(group_url)
+            time.sleep(2)  # Wait for any redirects or JavaScript to load
+
+            # Look for the group ID in the page source
+            page_source = self.driver.page_source
+            match = re.search(r'"groupID":"(\d+)"', page_source)
+            if match:
+                return match.group(1)
+
+            # If not found, try an alternative method
+            current_url = self.driver.current_url
+            match = re.search(r'facebook\.com/groups/(\d+)', current_url)
+            if match:
+                return match.group(1)
+
             return None
         except Exception as e:
             print(f"Error retrieving group ID for {group_name}: {e}")
