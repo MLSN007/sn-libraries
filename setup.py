@@ -12,7 +12,6 @@ setup(
         "hikerapi",
         "requests",
         "beautifulsoup4~=4.12.3",
-        "facebook-scraper",
     ],
     # Metadata
     description="A set of Python libraries for automating Facebook and Instagram functions.",
