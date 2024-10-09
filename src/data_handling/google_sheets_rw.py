@@ -1,5 +1,5 @@
 import datetime
-from src.data_handling.google_sheets_handler import GoogleSheetsHandler
+from google_sheets_handler import GoogleSheetsHandler
 
 
 class GoogleSheetsRW:

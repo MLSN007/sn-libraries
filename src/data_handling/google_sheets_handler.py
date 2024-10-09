@@ -11,7 +11,7 @@ from google.oauth2 import service_account
 class GoogleSheetsHandler:
     """
     Handles interactions with Google Sheets and Drive APIs for multiple accounts.
-    
+
     This class supports two modes of operation:
     1. Development mode: Uses local configuration files for credentials.
     2. Production mode: Uses the full OAuth 2.0 flow for desktop applications.
@@ -61,37 +61,48 @@ class GoogleSheetsHandler:
         """
         if not self.use_oauth and os.path.exists(self.config_path):
             # Development mode: Load credentials from config file
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path, "r") as f:
                 config = json.load(f)
-            if 'token' in config:
-                self.creds = Credentials.from_authorized_user_info(config['token'], self.SCOPES)
-        
+            if "token" in config:
+                self.creds = Credentials.from_authorized_user_info(
+                    config["token"], self.SCOPES
+                )
+
         if not self.creds or not self.creds.valid:
             if self.creds and self.creds.expired and self.creds.refresh_token:
                 self.creds.refresh(Request())
             else:
                 # Production mode or initial setup: Use OAuth flow for desktop apps
-                client_secrets_file = os.getenv(f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}")
+                client_secrets_file = os.getenv(
+                    f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}"
+                )
                 if not client_secrets_file:
-                    raise ValueError(f"Client secrets file path not set for {self.account_id}")
-                flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, self.SCOPES)
+                    raise ValueError(
+                        f"Client secrets file path not set for {self.account_id}"
+                    )
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    client_secrets_file, self.SCOPES
+                )
                 self.creds = flow.run_local_server(port=0)
-            
+
             # Save the credentials for the next run (development mode only)
             if not self.use_oauth and self.config_path:
-                with open(self.config_path, 'w') as f:
-                    json.dump({'token': self.creds.to_dict()}, f)
+                with open(self.config_path, "w") as f:
+                    json.dump({"token": self.creds.to_dict()}, f)
 
         if self.use_oauth:
             # ... (previous OAuth code remains)
+            pass
         else:
             # Use service account for automation
-            service_account_file = os.getenv(f"GOOGLE_SERVICE_ACCOUNT_{self.account_id.upper()}")
-            if not service_account_file:
-                raise ValueError(f"Service account file not set for {self.account_id}")
-            self.creds = service_account.Credentials.from_service_account_file(
-                service_account_file, scopes=self.SCOPES)
-        
+            service_account_file = os.getenv(
+                f"GOOGLE_SERVICE_ACCOUNT_{self.account_id.upper()}"
+            )
+            credentials = service_account.Credentials.from_service_account_file(
+                service_account_file,
+                scopes=["https://www.googleapis.com/auth/spreadsheets"],
+            )
+
         # Build service objects for Sheets and Drive APIs
         self.sheets_service = build("sheets", "v4", credentials=self.creds)
         self.drive_service = build("drive", "v3", credentials=self.creds)
