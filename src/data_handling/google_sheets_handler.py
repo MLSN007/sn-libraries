@@ -5,6 +5,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from google.oauth2 import service_account
 
 
 class GoogleSheetsHandler:
@@ -81,6 +82,16 @@ class GoogleSheetsHandler:
                 with open(self.config_path, 'w') as f:
                     json.dump({'token': self.creds.to_dict()}, f)
 
+        if self.use_oauth:
+            # ... (previous OAuth code remains)
+        else:
+            # Use service account for automation
+            service_account_file = os.getenv(f"GOOGLE_SERVICE_ACCOUNT_{self.account_id.upper()}")
+            if not service_account_file:
+                raise ValueError(f"Service account file not set for {self.account_id}")
+            self.creds = service_account.Credentials.from_service_account_file(
+                service_account_file, scopes=self.SCOPES)
+        
         # Build service objects for Sheets and Drive APIs
         self.sheets_service = build("sheets", "v4", credentials=self.creds)
         self.drive_service = build("drive", "v3", credentials=self.creds)
