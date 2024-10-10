@@ -1,2 +1,5 @@
-from . import fb
-from . import ig
+from .initial_setup import InitialSetup
+
+__all__ = [
+    "InitialSetup",
+]
