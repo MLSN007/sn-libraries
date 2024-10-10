@@ -56,7 +56,6 @@ requests==2.32.3
 requests-oauthlib==2.0.0
 rsa==4.9
 six==1.16.0
--e git+ssh://git@github.com/MLSN007/sn-libraries.git@a5ac62ed562e69f600d11a1a0c67ab604d3b0733#egg=sn_libraries
 sniffio==1.3.1
 soupsieve==2.6
 stack-data==0.6.3
