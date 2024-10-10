@@ -17,9 +17,9 @@ setup(
     description="A set of Python libraries for automating Facebook and Instagram functions.",
     long_description=open("README.md").read(),  # Include README (if available)
     long_description_content_type="text/markdown",
-    author="Your Name",
+    author="MLSN007",
     author_email="your.email@example.com",
-    url="https://github.com/MLSMIT/sn-libraries",
+    url="https://github.com/MLSN007/sn-libraries",
     # Additional details
     license="MIT",
     classifiers=[  # Classify your project for better discoverability on PyPI
