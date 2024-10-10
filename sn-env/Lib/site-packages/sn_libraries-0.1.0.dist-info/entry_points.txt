@@ -1,2 +1,0 @@
-[console_scripts]
-my_sn_tool = sn_libraries.tools:main
