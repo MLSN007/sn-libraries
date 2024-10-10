@@ -1,7 +1,4 @@
 from .google_sheets_handler import GoogleSheetsHandler
-from .google_sheets_rw import GoogleSheetsRw
+from .google_sheets_rw import GoogleSheetsRW
 
-__all__ = [
-    "GoogleSheetsHandler",
-    "GoogleSheetsRw",
-]
+__all__ = ['GoogleSheetsHandler', 'GoogleSheetsRW']

@@ -7,7 +7,6 @@ src/gen_ai/__init__.py
 src/sn-main/__init__.py
 src/sn-main/initial_setup.py
 src/sn-main/fb/__init__.py
-src/sn-main/fb/fb_api_client.py
 src/sn-main/fb/fb_comment_manager.py
 src/sn-main/fb/fb_post_manager.py
 src/sn-main/fb/fb_scraper.py
@@ -25,6 +24,5 @@ src/sn-main/ig/ig_utils.py
 src/sn_libraries.egg-info/PKG-INFO
 src/sn_libraries.egg-info/SOURCES.txt
 src/sn_libraries.egg-info/dependency_links.txt
-src/sn_libraries.egg-info/entry_points.txt
 src/sn_libraries.egg-info/requires.txt
 src/sn_libraries.egg-info/top_level.txt
