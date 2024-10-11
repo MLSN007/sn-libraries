@@ -1,5 +1,6 @@
 import os
 import json
+from typing import Optional, List, Dict, Any
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -26,7 +27,7 @@ class GoogleSheetsHandler:
         "https://www.googleapis.com/auth/drive.file",
     ]
 
-    def __init__(self, account_id, use_oauth=False):
+    def __init__(self, account_id: str, use_oauth: bool = False):
         """
         Initialize the GoogleSheetsHandler.
 
@@ -41,7 +42,7 @@ class GoogleSheetsHandler:
         self.sheets_service = None
         self.drive_service = None
 
-    def _get_config_path(self):
+    def _get_config_path(self) -> Optional[str]:
         """Get the configuration file path from environment variables."""
         env_var = f"GOOGLE_SHEETS_CONFIG_{self.account_id.upper()}"
         config_path = os.getenv(env_var)
@@ -49,7 +50,7 @@ class GoogleSheetsHandler:
             raise ValueError(f"Environment variable {env_var} is not set")
         return config_path
 
-    def authenticate(self):
+    def authenticate(self) -> None:
         """
         Authenticate with Google APIs.
 
@@ -60,19 +61,25 @@ class GoogleSheetsHandler:
         The method also refreshes expired tokens and saves new tokens in development mode.
         """
         if not self.use_oauth and os.path.exists(self.config_path):
-            # Development mode: Load credentials from config file
             with open(self.config_path, "r") as f:
                 config = json.load(f)
             if "token" in config:
+                token_data = config["token"]
+                if isinstance(token_data, str):
+                    token_data = json.loads(token_data)
                 self.creds = Credentials.from_authorized_user_info(
-                    config["token"], self.SCOPES
+                    token_data, self.SCOPES
                 )
 
         if not self.creds or not self.creds.valid:
             if self.creds and self.creds.expired and self.creds.refresh_token:
-                self.creds.refresh(Request())
-            else:
-                # Production mode or initial setup: Use OAuth flow for desktop apps
+                try:
+                    self.creds.refresh(Request())
+                except Exception as e:
+                    print(f"Error refreshing credentials: {e}")
+                    self.creds = None
+
+            if not self.creds:
                 client_secrets_file = os.getenv(
                     f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}"
                 )
@@ -85,29 +92,15 @@ class GoogleSheetsHandler:
                 )
                 self.creds = flow.run_local_server(port=0)
 
-            # Save the credentials for the next run (development mode only)
             if not self.use_oauth and self.config_path:
                 with open(self.config_path, "w") as f:
-                    json.dump({"token": self.creds.to_dict()}, f)
+                    token_data = json.dumps(self.creds.to_json())
+                    json.dump({"token": token_data}, f)
 
-        if self.use_oauth:
-            # ... (previous OAuth code remains)
-            pass
-        else:
-            # Use service account for automation
-            service_account_file = os.getenv(
-                f"GOOGLE_SERVICE_ACCOUNT_{self.account_id.upper()}"
-            )
-            credentials = service_account.Credentials.from_service_account_file(
-                service_account_file,
-                scopes=["https://www.googleapis.com/auth/spreadsheets"],
-            )
-
-        # Build service objects for Sheets and Drive APIs
         self.sheets_service = build("sheets", "v4", credentials=self.creds)
         self.drive_service = build("drive", "v3", credentials=self.creds)
 
-    def create_spreadsheet(self, title, folder_id):
+    def create_spreadsheet(self, title: str, folder_id: str) -> Optional[str]:
         """
         Create a new spreadsheet and move it to the specified folder.
 
@@ -132,7 +125,7 @@ class GoogleSheetsHandler:
                 .get(fileId=spreadsheet_id, fields="parents")
                 .execute()
             )
-            previous_parents = ",".join(file.get("parents"))
+            previous_parents = ",".join(file.get("parents", []))
             self.drive_service.files().update(
                 fileId=spreadsheet_id,
                 addParents=folder_id,
@@ -142,10 +135,12 @@ class GoogleSheetsHandler:
 
             return spreadsheet_id
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            print(f"An error occurred while creating spreadsheet: {error}")
             return None
 
-    def read_spreadsheet(self, spreadsheet_id, range_name):
+    def read_spreadsheet(
+        self, spreadsheet_id: str, range_name: str
+    ) -> Optional[List[List[Any]]]:
         try:
             result = (
                 self.sheets_service.spreadsheets()
@@ -155,29 +150,43 @@ class GoogleSheetsHandler:
             )
             return result.get("values", [])
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            if error.resp.status == 403:
+                print(
+                    f"Permission denied: Make sure the service account has access to the spreadsheet."
+                )
+            else:
+                print(f"An error occurred while reading spreadsheet: {error}")
             return None
 
-    def write_to_spreadsheet(self, spreadsheet_id, range_name, values):
+    def write_to_spreadsheet(
+        self,
+        spreadsheet_id: str,
+        range_name: str,
+        values: List[List[Any]],
+        insert_data_option: str = "OVERWRITE",
+    ) -> Optional[Dict[str, Any]]:
         try:
             body = {"values": values}
             result = (
                 self.sheets_service.spreadsheets()
                 .values()
-                .update(
+                .append(
                     spreadsheetId=spreadsheet_id,
                     range=range_name,
                     valueInputOption="USER_ENTERED",
+                    insertDataOption=insert_data_option,
                     body=body,
                 )
                 .execute()
             )
             return result
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            print(f"An error occurred while writing to spreadsheet: {error}")
             return None
 
-    def get_folder_id(self, folder_name, parent_folder_id="root"):
+    def get_folder_id(
+        self, folder_name: str, parent_folder_id: str = "root"
+    ) -> Optional[str]:
         try:
             query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and '{parent_folder_id}' in parents"
             results = (
@@ -186,10 +195,7 @@ class GoogleSheetsHandler:
                 .execute()
             )
             items = results.get("files", [])
-            if items:
-                return items[0]["id"]
-            else:
-                return None
+            return items[0]["id"] if items else None
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            print(f"An error occurred while getting folder ID: {error}")
             return None
