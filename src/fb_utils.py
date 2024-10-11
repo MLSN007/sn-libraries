@@ -80,6 +80,4 @@ class FbUtils:
             print(f"Error retrieving group info: {e}")
             return {}
 
-
-
     # ... rest of the class ...

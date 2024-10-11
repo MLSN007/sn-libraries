@@ -43,7 +43,9 @@ class FbPostManager:
     def __init__(self, api_client: "FacebookAPIClient") -> None:
         self.api_client = api_client
 
-    def get_latest_posts(self, page_id: str, num_posts: int = 10, fields: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+    def get_latest_posts(
+        self, page_id: str, num_posts: int = 10, fields: Optional[str] = None
+    ) -> Optional[List[Dict[str, Any]]]:
         """Retrieves the latest posts from a Facebook Page without attachment details.
 
         Args:
@@ -61,10 +63,7 @@ class FbPostManager:
 
         try:
             posts = self.api_client.get_connections(
-                page_id,
-                "posts",
-                fields=fields,
-                limit=num_posts
+                page_id, "posts", fields=fields, limit=num_posts
             )
             return posts.get("data")
         except requests.RequestException as e:
@@ -171,7 +170,9 @@ class FbPostManager:
             print(f"Error publishing post: {e}")
             return None
 
-    def publish_photo_post(self, page_id: str, message: str, photo_path: str) -> Optional[Dict]:
+    def publish_photo_post(
+        self, page_id: str, message: str, photo_path: str
+    ) -> Optional[Dict]:
         """Publishes a text-only (or photo) post on a Facebook Page.
 
         Args:
@@ -184,14 +185,39 @@ class FbPostManager:
         """
         try:
             with open(photo_path, "rb") as image_file:
-                files = {'source': image_file}
-                data = {'message': message}
-                post = self.api_client.put_object(page_id, "photos", files=files, **data)
+                files = {"source": image_file}
+                data = {"message": message}
+                post = self.api_client.put_object(
+                    page_id, "photos", files=files, **data
+                )
             print(f"Post with photo published successfully. Post ID: {post['post_id']}")
             return post
         except requests.RequestException as e:
             print(f"Error publishing post with photo: {e}")
             return None
+
+    def _format_post_result(self, post: Dict[str, Any]) -> str:
+        """Formats the post result into a friendly string."""
+        formatted_result = "Post Details:\n"
+        formatted_result += f"  Post ID: {post.get('id', 'N/A')}\n"
+        formatted_result += (
+            f"  Post URL: https://www.facebook.com/{post.get('id', '')}\n"
+        )
+
+        if "message" in post:
+            formatted_result += f"  Message: {post['message']}\n"
+
+        if "created_time" in post:
+            formatted_result += f"  Created at: {post['created_time']}\n"
+
+        if "attachments" in post:
+            formatted_result += "  Attachments:\n"
+            for attachment in post["attachments"].get("data", []):
+                formatted_result += f"    - Type: {attachment.get('type', 'N/A')}\n"
+                if "media" in attachment:
+                    formatted_result += f"      URL: {attachment['media'].get('image', {}).get('src', 'N/A')}\n"
+
+        return formatted_result
 
     def publish_multi_photo_post(
         self, page_id: str, message: str, photo_paths: List[str]
@@ -205,18 +231,17 @@ class FbPostManager:
                     photo = self.api_client.put_object(
                         page_id,
                         "photos",
+                        files={"source": photo_file},
                         published=False,
-                        files={"source": photo_file}
                     )
                     photo_ids.append({"media_fbid": photo["id"]})
+                    print(f"Uploaded photo: {photo['id']}")
 
             post = self.api_client.put_object(
-                page_id,
-                "feed",
-                message=message,
-                attached_media=photo_ids
+                page_id, "feed", message=message, attached_media=json.dumps(photo_ids)
             )
-            print(f"Multi-photo post published successfully. Post ID: {post['id']}")
+            print("Multi-photo post published successfully.")
+            print(self._format_post_result(post))
             return post
         except requests.RequestException as e:
             print(f"Error publishing multi-photo post: {e}")
@@ -229,22 +254,23 @@ class FbPostManager:
         try:
             with open(video_path, "rb") as video_file:
                 video_data = {
-                    "message": message,
-                    "source": video_file,
+                    "description": message,
+                    "title": title if title else "Uploaded video",
                 }
-                if title:
-                    video_data["title"] = title
+                files = {"source": video_file}
 
                 post = self.api_client.put_object(
-                    page_id,
-                    "videos",
-                    files={"source": video_file},
-                    **video_data
+                    page_id, "videos", data=video_data, files=files
                 )
             print(f"Video post published successfully. Post ID: {post.get('id')}")
             return post
         except requests.RequestException as e:
             print(f"Error publishing video post: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"Response content: {e.response.content}")
+            return None
+        except Exception as e:
+            print(f"Unexpected error publishing video post: {e}")
             return None
 
     def publish_reel(
@@ -252,26 +278,67 @@ class FbPostManager:
     ) -> Optional[Dict]:
         """Publishes a reel to a Facebook Page."""
         try:
-            with open(video_path, "rb") as video_file:
-                reel_data = {
-                    "message": message,
-                    "source": video_file,
-                    "is_reel": True,
-                }
-                if title:
-                    reel_data["title"] = title
+            # Step 1: Start the upload session
+            start_data = {
+                "upload_phase": "START",
+            }
+            start_response = self.api_client.put_object(
+                page_id, "video_reels", data=start_data
+            )
+            print(f"Start response: {start_response}")
 
-                reel = self.api_client.put_object(
-                    page_id,
-                    "videos",
-                    files={"source": video_file},
-                    **reel_data
+            if "video_id" not in start_response:
+                raise ValueError(
+                    f"Failed to start upload session. Response: {start_response}"
                 )
-            print(f"Reel published successfully. Reel ID: {reel['id']}")
+
+            video_id = start_response["video_id"]
+
+            # Step 2: Finish the upload and publish the reel
+            with open(video_path, "rb") as video_file:
+                finish_data = {
+                    "upload_phase": "FINISH",
+                    "video_id": video_id,
+                    "title": title if title else "Uploaded reel",
+                    "description": message,
+                }
+                files = {"source": video_file}
+
+                print(f"Sending FINISH request with data: {finish_data}")
+                reel = self.api_client.put_object(
+                    page_id, "video_reels", data=finish_data, files=files
+                )
+
+            print(f"Reel published successfully. Reel ID: {reel.get('id')}")
+            print(self._format_reel_result(reel))
             return reel
         except requests.RequestException as e:
             print(f"Error publishing reel: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"Response content: {e.response.content}")
             return None
+        except Exception as e:
+            print(f"Unexpected error publishing reel: {e}")
+            return None
+
+    def _format_reel_result(self, reel: Dict[str, Any]) -> str:
+        """Formats the reel result into a friendly string."""
+        formatted_result = "Reel Details:\n"
+        formatted_result += f"  Reel ID: {reel.get('id', 'N/A')}\n"
+        formatted_result += (
+            f"  Reel URL: https://www.facebook.com/reel/{reel.get('id', '')}\n"
+        )
+
+        if "description" in reel:
+            formatted_result += f"  Description: {reel['description']}\n"
+
+        if "title" in reel:
+            formatted_result += f"  Title: {reel['title']}\n"
+
+        if "created_time" in reel:
+            formatted_result += f"  Created at: {reel['created_time']}\n"
+
+        return formatted_result
 
     def share_public_post(
         self, page_id: str, post_id: str, message: Optional[str] = None
@@ -323,5 +390,6 @@ class FbPostManager:
         except requests.RequestException as e:
             print(f"Error sharing video: {e}")
             return None
+
 
 # ... (Other methods for publishing multi-photo and video posts will be added later)

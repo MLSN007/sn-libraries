@@ -58,12 +58,21 @@ class FbApiClient:
         method: str = "GET",
         params: Optional[Dict] = None,
         data: Optional[Dict] = None,
+        files: Optional[Dict] = None,
     ) -> Dict[str, Any]:
         url = f"{self.base_url}{endpoint}"
         params = params or {}
-        params["access_token"] = self.access_token
+        if "access_token" not in params:
+            params["access_token"] = self.access_token
 
-        response = requests.request(method, url, params=params, json=data)
+        print(f"Making {method} request to {url}")
+        print(f"Params: {params}")
+        print(f"Data: {data}")
+        print(f"Files: {files.keys() if files else None}")
+
+        response = requests.request(method, url, params=params, data=data, files=files)
+        print(f"Response status code: {response.status_code}")
+        print(f"Response content: {response.content}")
         response.raise_for_status()
         return response.json()
 
@@ -82,9 +91,16 @@ class FbApiClient:
         return self.make_request(endpoint, params=kwargs)
 
     def put_object(
-        self, parent_object: str, connection_name: str, **data
+        self,
+        parent_object: str,
+        connection_name: str,
+        data: Optional[Dict] = None,
+        files: Optional[Dict] = None,
     ) -> Dict[str, Any]:
         endpoint = f"{parent_object}/{connection_name}"
-        return self.make_request(endpoint, method="POST", data=data)
+        if data and "access_token" not in data:
+            data["access_token"] = self.access_token
+        print(f"Sending request to {endpoint} with data: {data}")
+        return self.make_request(endpoint, method="POST", data=data, files=files)
 
     # Add more methods as needed
