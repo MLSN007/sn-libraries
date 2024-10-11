@@ -297,17 +297,24 @@ class FbPostManager:
         """
         graph = self.api_client.get_graph_api_object()
         try:
-            # Open the video file
             with open(video_path, "rb") as video_file:
-                # Create the video post
-                video_data = {"message": message, "source": video_file}
+                video_data = {
+                    "message": message,
+                    "source": video_file,
+                }
                 if title:
                     video_data["title"] = title
 
+                print(f"Attempting to upload video: {video_path}")
+                print(f"Video data: {video_data}")
+                
                 post = graph.put_object(
-                    parent_object=page_id, connection_name="videos", resumable=True, **video_data
+                    parent_object=page_id,
+                    connection_name="videos",
+                    **video_data
                 )
-            print(f"Video post published successfully. Post ID: {post['id']}")
+            
+            print(f"Video post published successfully. Post ID: {post.get('id')}")
             return post
         except facebook.GraphAPIError as e:
             print(f"Facebook API Error: {e}")
@@ -315,6 +322,7 @@ class FbPostManager:
             print(f"Error Message: {str(e)}")
             print(f"Error Code: {getattr(e, 'code', 'N/A')}")
             print(f"Error Subcode: {getattr(e, 'error_subcode', 'N/A')}")
+            print(f"Full error details: {getattr(e, 'result', 'N/A')}")
             return None
         except IOError as e:
             print(f"IO Error: {e}")
