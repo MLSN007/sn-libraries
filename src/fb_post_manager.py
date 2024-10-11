@@ -305,15 +305,26 @@ class FbPostManager:
                     video_data["title"] = title
 
                 post = graph.put_object(
-                    parent_object=page_id, connection_name="videos", **video_data
+                    parent_object=page_id, connection_name="videos", resumable=True, **video_data
                 )
             print(f"Video post published successfully. Post ID: {post['id']}")
             return post
         except facebook.GraphAPIError as e:
-            print(f"Error publishing video post: {e.message}")
+            print(f"Facebook API Error: {e}")
+            print(f"Error Type: {type(e).__name__}")
+            print(f"Error Message: {str(e)}")
+            print(f"Error Code: {getattr(e, 'code', 'N/A')}")
+            print(f"Error Subcode: {getattr(e, 'error_subcode', 'N/A')}")
             return None
         except IOError as e:
-            print(f"Error opening video file: {e}")
+            print(f"IO Error: {e}")
+            print(f"Error Type: {type(e).__name__}")
+            print(f"Error Message: {str(e)}")
+            return None
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            print(f"Error Type: {type(e).__name__}")
+            print(f"Error Message: {str(e)}")
             return None
 
     def publish_reel(

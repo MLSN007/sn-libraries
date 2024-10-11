@@ -49,6 +49,7 @@ class FbApiClient:
         access_token: Optional[str] = None,
         page_id: Optional[str] = None,
         api_version: str = "3.1",
+        # api_version: str = "21.0",
     ) -> None:
 
         self.app_id = app_id
