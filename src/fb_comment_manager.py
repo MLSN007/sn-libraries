@@ -1,8 +1,7 @@
 """A class for managing Facebook comment-related actions."""
 
-from typing import List, Dict, Any, Optional
-import facebook  # Make sure you have the 'facebook-sdk' library installed
 import requests
+from typing import List, Dict, Any, Optional
 
 class FbCommentManager:
     """A class for managing Facebook comment-related actions.
@@ -20,9 +19,7 @@ class FbCommentManager:
     def __init__(self, api_client: "FbApiClient") -> None:
         self.api_client = api_client
 
-    def get_post_comments(
-        self, post_id: str, fields: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+    def get_post_comments(self, post_id: str, fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Retrieves comments for a specific Facebook post with optional filtering.
 
         Args:
@@ -36,38 +33,24 @@ class FbCommentManager:
         """
      
 
-        graph = self.api_client.get_graph_api_object()
-        all_comments = []
-        default_fields = ["id", "message", "created_time", "from", "like_count", "parent", "user_likes","reactions"]  # Updated default fields
+        default_fields = ["id", "message", "created_time", "from", "like_count", "parent", "user_likes", "reactions"]
         fields_str = ",".join(fields or default_fields)
-
+        
         try:
-            comments = graph.get_connections(
-                id=post_id, connection_name="comments", fields=fields_str
-            )
+            comments = self.api_client.get_connections(post_id, "comments", fields=fields_str)
+            all_comments = comments.get("data", [])
 
-            all_comments.extend(comments["data"])
-
-            # Handle paging with timeout
             while "paging" in comments and "next" in comments["paging"]:
                 next_url = comments["paging"]["next"]
-                comments = requests.get(next_url, timeout=10).json()  # 10-second timeout
-                all_comments.extend(comments["data"])
+                comments = requests.get(next_url, timeout=10).json()
+                all_comments.extend(comments.get("data", []))
 
-        except requests.Timeout: 
-            print(f"Request timed out while fetching comments for post {post_id}")
             return all_comments
-
-        except facebook.GraphAPIError as e:
+        except requests.RequestException as e:
             print(f"Error retrieving comments: {e}")
-            return []  # Return empty list on error
+            return []
 
-        return all_comments
-
-
-    def react_to_comment(
-        self, comment_id: str, message: Optional[str] = None, like: bool = False
-    ) -> Optional[Dict[str, Any]]:
+    def react_to_comment(self, comment_id: str, message: Optional[str] = None, like: bool = False) -> Optional[Dict[str, Any]]:
         """Reacts to a Facebook comment by replying (optional) and liking (optional).
 
         Args:
@@ -81,21 +64,17 @@ class FbCommentManager:
         """
  
 
-        graph = self.api_client.get_graph_api_object()
-        response = None  # Initialize response variable
-
         try:
+            response = None
             if message:
-                # Reply to the comment
-                response = graph.put_comment(object_id=comment_id, message=message)
+                response = self.api_client.put_object(comment_id, "comments", message=message)
                 print(f"Replied to comment {comment_id}: {message}")
 
             if like:
-                # Like the comment
-                response = graph.put_like(object_id=comment_id)
+                response = self.api_client.put_object(comment_id, "likes")
                 print(f"Liked comment {comment_id}")
 
-        except facebook.GraphAPIError as e:
+        except requests.RequestException as e:
             print(f"Error reacting to comment: {e}")
 
         return response  # Return the API response, if any

@@ -30,7 +30,7 @@
 from typing import Dict, Optional, Any, List
 import time
 import json
-import facebook
+import requests
 
 
 class FbPostManager:
@@ -43,9 +43,7 @@ class FbPostManager:
     def __init__(self, api_client: "FacebookAPIClient") -> None:
         self.api_client = api_client
 
-    def get_latest_posts(
-        self, page_id: str, num_posts: int = 10, fields: Optional[str] = None
-    ) -> Optional[List[Dict[str, Any]]]:
+    def get_latest_posts(self, page_id: str, num_posts: int = 10, fields: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
         """Retrieves the latest posts from a Facebook Page without attachment details.
 
         Args:
@@ -58,22 +56,19 @@ class FbPostManager:
                 or None if an error occurs.
         """
 
-        graph = self.api_client.get_graph_api_object()
-
-        # Define default fields if none are provided
-        default_fields = (
-            "id,message,created_time,permalink_url,"
-            "likes.summary(true),comments.summary(true)"
-        )
+        default_fields = "id,message,created_time,permalink_url,likes.summary(true),comments.summary(true)"
         fields = fields or default_fields
 
         try:
-            posts = graph.get_connections(
-                id=page_id, connection_name="posts", fields=fields, limit=num_posts
+            posts = self.api_client.get_connections(
+                page_id,
+                "posts",
+                fields=fields,
+                limit=num_posts
             )
-            return posts["data"]
-        except facebook.GraphAPIError as e:
-            print(f"Error retrieving latest posts: {e.message}")
+            return posts.get("data")
+        except requests.RequestException as e:
+            print(f"Error retrieving latest posts: {e}")
             return None
 
     def get_post_by_id(self, post_id: str) -> Optional[Dict[str, Any]]:
@@ -93,32 +88,25 @@ class FbPostManager:
             If the post is not found or an error occurs, None is returned.
         """
 
-        graph = self.api_client.get_graph_api_object()
         fields = (
             "id,message,created_time,permalink_url,"
             "likes.summary(true),comments.summary(true),attachments"
         )
-
         try:
-            post_data = graph.get_object(id=post_id, fields=fields)
-
+            post_data = self.api_client.get_object(post_id, fields=fields)
             # Process attachments (if present)
             if "attachments" in post_data:
                 attachments = post_data["attachments"]["data"]
                 for attachment in attachments:
                     if attachment.get("media_type") == "photo":
-                        # Access photo URL from attachment['media']['image']['src']
                         photo_url = attachment["media"]["image"]["src"]
                         print(f"Found photo: {photo_url}")
                     elif attachment.get("media_type") == "video":
-                        # Access video URL from attachment['media']['source']
                         video_url = attachment["media"]["source"]
                         print(f"Found video: {video_url}")
-
             return post_data
-
-        except facebook.GraphAPIError as e:
-            print(f"Error retrieving post by ID: {e.message}")
+        except requests.RequestException as e:
+            print(f"Error retrieving post by ID: {e}")
             return None
 
     def get_post_likes(self, post_id: str) -> List[Dict[str, Any]]:
@@ -134,27 +122,19 @@ class FbPostManager:
                 - User's name and ID (if permission is granted)
                 - {"unknown": True} if user information is not accessible
         """
-        graph = self.api_client.get_graph_api_object()
-        likes = []
-
         try:
-            likes_response = graph.get_connections(
-                id=post_id,
-                connection_name="likes",
-                # No need for specific fields as we handle permissions below
-            )
+            likes_response = self.api_client.get_connections(post_id, "likes")
             likes_data = likes_response.get("data", [])
-
+            likes = []
             for like_data in likes_data:
                 if "name" in like_data and "id" in like_data:
-                    likes.append(like_data)  # If name and ID available, add as is
+                    likes.append(like_data)
                 else:
-                    likes.append({"unknown": True})  # Add indicator for unknown user
-
-        except facebook.GraphAPIError as e:
+                    likes.append({"unknown": True})
+            return likes
+        except requests.RequestException as e:
             print(f"Error retrieving likes for post {post_id}: {e}")
-
-        return likes
+            return []
 
     def get_post_shares(self, post_id: str) -> List[Dict]:
         """Retrieves shared post data for a specific Facebook post.
@@ -165,19 +145,12 @@ class FbPostManager:
         Returns:
             List[Dict]: A list of dictionaries, each representing a shared post. Returns 0 on error.
         """
-
-        graph = self.api_client.get_graph_api_object()
-
         try:
-            shared_posts = graph.get_all_connections(
-                id=post_id,
-                connection_name="sharedposts",
-            )
-            return list(shared_posts)  # Convert generator to a list for easy access
-
-        except facebook.GraphAPIError as e:
+            shared_posts = self.api_client.get_connections(post_id, "sharedposts")
+            return shared_posts.get("data", [])
+        except requests.RequestException as e:
             print(f"Error retrieving shares for post {post_id}: {e}")
-            return 0  # Return 0 on error
+            return []
 
     def publish_text_post(self, page_id: str, message: str) -> Optional[Dict]:
         """Publishes a text-only (or photo) post on a Facebook Page.
@@ -190,21 +163,15 @@ class FbPostManager:
         Returns:
             Optional[Dict]: A dictionary containing post details if successful, or None if an error occurs.
         """
-
-        graph = self.api_client.get_graph_api_object()
         try:
-            post = graph.put_object(
-                parent_object=page_id, connection_name="feed", message=message
-            )
+            post = self.api_client.put_object(page_id, "feed", message=message)
             print(f"Post published successfully. Post ID: {post['id']}")
-            return post  # Return post data
-        except facebook.GraphAPIError as e:
-            print(f"Error publishing post: {e.message}")
+            return post
+        except requests.RequestException as e:
+            print(f"Error publishing post: {e}")
             return None
 
-    def publish_photo_post(
-        self, page_id: str, message: str, photo_path: str
-    ) -> Optional[Dict]:
+    def publish_photo_post(self, page_id: str, message: str, photo_path: str) -> Optional[Dict]:
         """Publishes a text-only (or photo) post on a Facebook Page.
 
         Args:
@@ -215,87 +182,50 @@ class FbPostManager:
         Returns:
             Optional[Dict]: A dictionary containing post details if successful, or None if an error occurs.
         """
-        graph = self.api_client.get_graph_api_object()
-        with open(photo_path, "rb") as image_file:
-            try:
-                post = graph.put_photo(
-                    parent_object=page_id,
-                    connection_name="photos",
-                    message=message,
-                    image=image_file,
-                )
-                print(
-                    f"Post with photo published successfully. Post ID: {post['post_id']}"
-                )
-                return post  # Return post data
-            except facebook.GraphAPIError as e:
-                print(f"Error publishing post with photo: {e.message}")
-                return None
+        try:
+            with open(photo_path, "rb") as image_file:
+                files = {'source': image_file}
+                data = {'message': message}
+                post = self.api_client.put_object(page_id, "photos", files=files, **data)
+            print(f"Post with photo published successfully. Post ID: {post['post_id']}")
+            return post
+        except requests.RequestException as e:
+            print(f"Error publishing post with photo: {e}")
+            return None
 
     def publish_multi_photo_post(
         self, page_id: str, message: str, photo_paths: List[str]
     ) -> Optional[Dict]:
-        """Publishes a post with multiple photos to a Facebook Page.
-
-        Args:
-            page_id (str): The ID of the page to post to.
-            message (str): The text content of the post.
-            photo_paths (List[str]): A list of file paths to the photos to be uploaded.
-
-        Returns:
-            Optional[Dict]: A dictionary containing post details if successful,
-                or None if an error occurs.
-        """
-        graph = self.api_client.get_graph_api_object()
+        """Publishes a post with multiple photos to a Facebook Page."""
         try:
-            # Prepare to upload photos and collect their IDs
             photo_ids = []
             for photo_path in photo_paths:
                 with open(photo_path, "rb") as photo_file:
-                    time.sleep(2)  # sleep to avoid facebook error
-                    # Upload each photo and get the returned post ID
-                    photo = graph.put_photo(
-                        parent_object=page_id,
-                        connection_name="photos",
-                        message="",  # You can add a message for each photo if needed
-                        image=photo_file,
+                    time.sleep(2)  # sleep to avoid Facebook rate limiting
+                    photo = self.api_client.put_object(
+                        page_id,
+                        "photos",
+                        published=False,
+                        files={"source": photo_file}
                     )
-                    photo_ids.append(photo["id"])  # Collect the photo ID
+                    photo_ids.append({"media_fbid": photo["id"]})
 
-            # Debugging: Print the collected photo IDs
-            print(f"Collected photo IDs: {photo_ids}")
-
-            # Create a post with the uploaded photos
-            post = graph.put_object(
-                parent_object=page_id,
-                connection_name="feed",
+            post = self.api_client.put_object(
+                page_id,
+                "feed",
                 message=message,
-                attached_media=[
-                    {"media_fbid": photo_id} for photo_id in photo_ids
-                ],  # Reference the uploaded photos
+                attached_media=photo_ids
             )
             print(f"Multi-photo post published successfully. Post ID: {post['id']}")
             return post
-        except facebook.GraphAPIError as e:
-            print(f"Error publishing multi-photo post: {e.message}")
+        except requests.RequestException as e:
+            print(f"Error publishing multi-photo post: {e}")
             return None
 
     def publish_video_post(
         self, page_id: str, message: str, video_path: str, title: Optional[str] = None
     ) -> Optional[Dict]:
-        """Publishes a video post to a Facebook Page.
-
-        Args:
-            page_id (str): The ID of the page to post to.
-            message (str): The text content of the post.
-            video_path (str): The file path to the video to be uploaded.
-            title (Optional[str]): An optional title for the video.
-
-        Returns:
-            Optional[Dict]: A dictionary containing post details if successful,
-                or None if an error occurs.
-        """
-        graph = self.api_client.get_graph_api_object()
+        """Publishes a video post to a Facebook Page."""
         try:
             with open(video_path, "rb") as video_file:
                 video_data = {
@@ -305,159 +235,93 @@ class FbPostManager:
                 if title:
                     video_data["title"] = title
 
-                print(f"Attempting to upload video: {video_path}")
-                print(f"Video data: {video_data}")
-                
-                post = graph.put_object(
-                    parent_object=page_id,
-                    connection_name="videos",
+                post = self.api_client.put_object(
+                    page_id,
+                    "videos",
+                    files={"source": video_file},
                     **video_data
                 )
-            
             print(f"Video post published successfully. Post ID: {post.get('id')}")
             return post
-        except facebook.GraphAPIError as e:
-            print(f"Facebook API Error: {e}")
-            print(f"Error Type: {type(e).__name__}")
-            print(f"Error Message: {str(e)}")
-            print(f"Error Code: {getattr(e, 'code', 'N/A')}")
-            print(f"Error Subcode: {getattr(e, 'error_subcode', 'N/A')}")
-            print(f"Full error details: {getattr(e, 'result', 'N/A')}")
-            return None
-        except IOError as e:
-            print(f"IO Error: {e}")
-            print(f"Error Type: {type(e).__name__}")
-            print(f"Error Message: {str(e)}")
-            return None
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            print(f"Error Type: {type(e).__name__}")
-            print(f"Error Message: {str(e)}")
+        except requests.RequestException as e:
+            print(f"Error publishing video post: {e}")
             return None
 
     def publish_reel(
         self, page_id: str, message: str, video_path: str, title: Optional[str] = None
     ) -> Optional[Dict]:
-        """Publishes a reel to a Facebook Page.
-
-        Args:
-            page_id (str): The ID of the page to post the reel to.
-            message (str): The text content of the reel post.
-            video_path (str): The file path to the video to be uploaded as a reel.
-            title (Optional[str]): An optional title for the reel.
-
-        Returns:
-            Optional[Dict]: A dictionary containing reel post details if successful,
-                or None if an error occurs.
-        """
-        graph = self.api_client.get_graph_api_object()
+        """Publishes a reel to a Facebook Page."""
         try:
-            # Open the video file
             with open(video_path, "rb") as video_file:
-                # Create the reel post
                 reel_data = {
                     "message": message,
                     "source": video_file,
-                    "is_reel": True,  # This parameter specifies that it's a reel
+                    "is_reel": True,
                 }
                 if title:
                     reel_data["title"] = title
 
-                reel = graph.put_object(
-                    parent_object=page_id, connection_name="videos", **reel_data
+                reel = self.api_client.put_object(
+                    page_id,
+                    "videos",
+                    files={"source": video_file},
+                    **reel_data
                 )
             print(f"Reel published successfully. Reel ID: {reel['id']}")
             return reel
-        except facebook.GraphAPIError as e:
-            print(f"Error publishing reel: {e.message}")
-            return None
-        except IOError as e:
-            print(f"Error opening video file: {e}")
+        except requests.RequestException as e:
+            print(f"Error publishing reel: {e}")
             return None
 
     def share_public_post(
         self, page_id: str, post_id: str, message: Optional[str] = None
     ) -> Optional[Dict]:
-        """Shares a public post from another user on a Facebook Page.
-
-        Args:
-            page_id (str): The ID of the page to share the post on.
-            post_id (str): The ID of the public post to be shared.
-            message (Optional[str]): An optional message to accompany the shared post.
-
-        Returns:
-            Optional[Dict]: A dictionary containing shared post details if successful,
-                or None if an error occurs.
-        """
-        graph = self.api_client.get_graph_api_object()
+        """Shares a public post from another user on a Facebook Page."""
         try:
-            shared_post = graph.put_object(
-                parent_object=page_id,
-                connection_name="feed",
+            shared_post = self.api_client.put_object(
+                page_id,
+                "feed",
                 link=f"https://www.facebook.com/{post_id}",
                 message=message,
             )
             print(f"Post shared successfully. Shared post ID: {shared_post['id']}")
             return shared_post
-        except facebook.GraphAPIError as e:
-            print(f"Error sharing post: {e.message}")
+        except requests.RequestException as e:
+            print(f"Error sharing post: {e}")
             return None
 
     def share_public_reel(
         self, page_id: str, reel_id: str, message: Optional[str] = None
     ) -> Optional[Dict]:
-        """Shares a public reel from another user on a Facebook Page's feed.
-
-        Args:
-            page_id (str): The ID of the page to share the reel on.
-            reel_id (str): The ID of the public reel to be shared.
-            message (Optional[str]): An optional message to accompany the shared reel.
-
-        Returns:
-            Optional[Dict]: A dictionary containing shared reel details if successful,
-                or None if an error occurs.
-        """
-        graph = self.api_client.get_graph_api_object()
+        """Shares a public reel from another user on a Facebook Page's feed."""
         try:
-            shared_reel = graph.put_object(
-                parent_object=page_id,
-                connection_name="feed",
+            shared_reel = self.api_client.put_object(
+                page_id,
+                "feed",
                 link=f"https://www.facebook.com/reel/{reel_id}",
                 message=message,
             )
             print(f"Reel shared successfully. Shared post ID: {shared_reel['id']}")
             return shared_reel
-        except facebook.GraphAPIError as e:
-            print(f"Error sharing reel: {e.message}")
+        except requests.RequestException as e:
+            print(f"Error sharing reel: {e}")
             return None
 
     def share_public_video(
         self, page_id: str, video_id: str, message: Optional[str] = None
     ) -> Optional[Dict]:
-        """Shares a public video from another user on a Facebook Page's feed.
-
-        Args:
-            page_id (str): The ID of the page to share the video on.
-            video_id (str): The ID of the public video to be shared.
-            message (Optional[str]): An optional message to accompany the shared video.
-
-        Returns:
-            Optional[Dict]: A dictionary containing shared video details if successful,
-                or None if an error occurs.
-        """
-        graph = self.api_client.get_graph_api_object()
+        """Shares a public video from another user on a Facebook Page's feed."""
         try:
-            shared_video = graph.put_object(
-                parent_object=page_id,
-                connection_name="feed",
+            shared_video = self.api_client.put_object(
+                page_id,
+                "feed",
                 link=f"https://www.facebook.com/watch/?v={video_id}",
                 message=message,
             )
             print(f"Video shared successfully. Shared post ID: {shared_video['id']}")
             return shared_video
-        except facebook.GraphAPIError as e:
-            print(f"Error sharing video: {e.message}")
+        except requests.RequestException as e:
+            print(f"Error sharing video: {e}")
             return None
-
 
 # ... (Other methods for publishing multi-photo and video posts will be added later)

@@ -73,11 +73,10 @@ class FbUtils:
         Returns:
             Dict[str, Any]: A dictionary containing the group's information, or an empty dictionary if an error occurs.
         """
-        graph = self.api_client.get_graph_api_object()
         try:
-            group_data = graph.get_object(id=group_id, fields=fields)
+            group_data = self.api_client.get_object(group_id, fields=fields)
             return group_data
-        except facebook.GraphAPIError as e:
+        except requests.RequestException as e:
             print(f"Error retrieving group info: {e}")
             return {}
 
