@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from sn_libraries.data_handling import GoogleSheetsRW
+from google_sheets_rw import GoogleSheetsRW
 import datetime
 
 
