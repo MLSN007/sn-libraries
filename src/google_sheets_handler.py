@@ -67,9 +67,13 @@ class GoogleSheetsHandler:
                 token_data = config["token"]
                 if isinstance(token_data, str):
                     token_data = json.loads(token_data)
-                self.creds = Credentials.from_authorized_user_info(
-                    token_data, self.SCOPES
-                )
+                if isinstance(token_data, dict):
+                    self.creds = Credentials.from_authorized_user_info(
+                        token_data, self.SCOPES
+                    )
+                else:
+                    print(f"Invalid token data format: {type(token_data)}")
+                    self.creds = None
 
         if not self.creds or not self.creds.valid:
             if self.creds and self.creds.expired and self.creds.refresh_token:
@@ -94,7 +98,7 @@ class GoogleSheetsHandler:
 
             if not self.use_oauth and self.config_path:
                 with open(self.config_path, "w") as f:
-                    token_data = json.dumps(self.creds.to_json())
+                    token_data = json.dumps(json.loads(self.creds.to_json()))
                     json.dump({"token": token_data}, f)
 
         self.sheets_service = build("sheets", "v4", credentials=self.creds)
@@ -199,3 +203,12 @@ class GoogleSheetsHandler:
         except HttpError as error:
             print(f"An error occurred while getting folder ID: {error}")
             return None
+
+    def read_range(self, spreadsheet_id: str, range_name: str) -> List[List[Any]]:
+        # Implementation
+
+    def write_range(self, spreadsheet_id: str, range_name: str, values: List[List[Any]]) -> None:
+        # Implementation
+
+    def append_row(self, spreadsheet_id: str, sheet_name: str, values: List[Any]) -> None:
+        # Implementation

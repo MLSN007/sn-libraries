@@ -10,7 +10,7 @@ class GoogleSheetsRW:
         self.spreadsheet_id = spreadsheet_id
 
     def read_unpublished_row(self) -> Optional[Tuple[int, Dict[str, Any]]]:
-        range_name = "'to publish'!A1:N"  # Extend range to include all columns
+        range_name = "'to publish'!A1:N"
         values = self.handler.read_spreadsheet(self.spreadsheet_id, range_name)
 
         if (
@@ -37,7 +37,7 @@ class GoogleSheetsRW:
         self, row_index: int, published_data: Dict[str, Any]
     ) -> None:
         range_name = f"'to publish'!L{row_index}:N{row_index}"
-        headers = ["Published? Y/N", "Date Published", "Post ID"]
+        headers = ["Published? Y/N", "Date and Time", "ID (str.)"]
         values = [[published_data.get(header, "") for header in headers]]
         result = self.handler.write_to_spreadsheet(
             self.spreadsheet_id, range_name, values
@@ -47,12 +47,19 @@ class GoogleSheetsRW:
         else:
             print(f"Successfully wrote published data to row {row_index}")
 
-    def write_to_published_tab(self, data: Dict[str, Any]) -> None:
-        range_name = "'published'!A:F"
-        headers = ["Date", "Time", "Type", "Title", "Description", "Link"]
+    def write_to_published_tab(self, row_index: int, data: Dict[str, Any]) -> None:
+        range_name = f"'published'!A{row_index}:F{row_index}"
+        headers = [
+            "Ref #",
+            "Subject",
+            "Type",
+            "Published? Y/N",
+            "Date and Time",
+            "ID (str.)",
+        ]
         values = [[data.get(header, "") for header in headers]]
         result = self.handler.write_to_spreadsheet(
-            self.spreadsheet_id, range_name, values, insert_data_option="INSERT_ROWS"
+            self.spreadsheet_id, range_name, values
         )
         if result is None:
             print("Failed to write data to published tab")

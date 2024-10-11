@@ -340,6 +340,12 @@ class FbPostManager:
 
         return formatted_result
 
+    def publish_carousel(
+        self, page_id: str, message: str, photo_paths: List[str]
+    ) -> Optional[Dict]:
+        """Publishes a carousel post to a Facebook Page."""
+        # Implementation
+
     def share_public_post(
         self, page_id: str, post_id: str, message: Optional[str] = None
     ) -> Optional[Dict]:
