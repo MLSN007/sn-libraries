@@ -224,3 +224,53 @@ class GoogleSheetsHandler:
     def get_current_datetime(self) -> str:
         """Get the current date and time as a formatted string."""
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def update_spreadsheet(
+        self,
+        spreadsheet_id: str,
+        range_name: str,
+        values: List[List[Any]],
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            body = {"values": values}
+            result = (
+                self.sheets_service.spreadsheets()
+                .values()
+                .update(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    valueInputOption="USER_ENTERED",
+                    body=body,
+                )
+                .execute()
+            )
+            return result
+        except HttpError as error:
+            print(f"An error occurred while updating spreadsheet: {error}")
+            return None
+
+    def append_to_spreadsheet(
+        self,
+        spreadsheet_id: str,
+        range_name: str,
+        values: List[List[Any]],
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            body = {"values": values}
+            result = (
+                self.sheets_service.spreadsheets()
+                .values()
+                .append(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    valueInputOption="USER_ENTERED",
+                    insertDataOption="INSERT_ROWS",
+                    body=body,
+                )
+                .execute()
+            )
+            print(f"Append result: {result}")  # Add this line for debugging
+            return result
+        except HttpError as error:
+            print(f"An error occurred while appending to spreadsheet: {error}")
+            return None

@@ -32,6 +32,8 @@ import time
 import json
 import requests
 import os
+import traceback
+import random
 
 
 class FbPostManager:
@@ -164,16 +166,18 @@ class FbPostManager:
             print(f"Error publishing post: {e}")
             return None
 
-    def publish_photo_post(self, page_id: str, message: str, photo_path: str) -> Optional[Dict[str, Any]]:
+    def publish_photo_post(
+        self, page_id: str, message: str, photo_path: str
+    ) -> Optional[Dict[str, Any]]:
         """Publishes a photo post with a message on a Facebook Page."""
         try:
             with open(photo_path, "rb") as image_file:
                 post = self.api_client.put_photo(
-                    image=image_file,
-                    message=message,
-                    album_path=f"{page_id}/photos"
+                    image=image_file, message=message, album_path=f"{page_id}/photos"
                 )
-            print(f"Post with photo published successfully. Post ID: {post.get('post_id') or post.get('id')}")
+            print(
+                f"Post with photo published successfully. Post ID: {post.get('post_id') or post.get('id')}"
+            )
             return post
         except Exception as e:
             print(f"Error publishing post with photo: {e}")
@@ -203,31 +207,69 @@ class FbPostManager:
         return formatted_result
 
     def publish_multi_photo_post(
-        self, page_id: str, message: str, photo_paths: List[str]
+        self, page_id: str, message: str, photo_paths: List[str], max_retries: int = 3
     ) -> Optional[Dict]:
         """Publishes a post with multiple photos to a Facebook Page."""
         try:
+            print(f"Attempting to publish multi-photo post to page_id: {page_id}")
+            print(f"Message: {message}")
+            print(f"Photo paths: {photo_paths}")
+
             photo_ids = []
             for photo_path in photo_paths:
-                with open(photo_path, "rb") as photo_file:
-                    time.sleep(2)  # sleep to avoid Facebook rate limiting
-                    photo = self.api_client.put_object(
-                        page_id,
-                        "photos",
-                        files={"source": photo_file},
-                        published=False,
-                    )
-                    photo_ids.append({"media_fbid": photo["id"]})
-                    print(f"Uploaded photo: {photo['id']}")
+                retries = 0
+                while retries < max_retries:
+                    try:
+                        print(f"Uploading photo: {photo_path} (Attempt {retries + 1})")
+                        with open(photo_path, "rb") as photo_file:
+                            photo = self.api_client.put_photo(
+                                image=photo_file,
+                                message=None,
+                                album_path=f"{page_id}/photos",
+                                published=False
+                            )
+                        print(f"Photo upload response: {photo}")
+                        photo_ids.append({"media_fbid": photo['id']})
+                        break  # Successfully uploaded, break the retry loop
+                    except Exception as e:
+                        print(f"Error uploading photo: {e}")
+                        retries += 1
+                        if retries < max_retries:
+                            wait_time = random.uniform(1, 5)  # Random wait between 1 and 5 seconds
+                            print(f"Retrying in {wait_time:.2f} seconds...")
+                            time.sleep(wait_time)
+                        else:
+                            print(f"Failed to upload photo after {max_retries} attempts")
+                            raise
+
+                # Add a delay between photo uploads
+                time.sleep(2)
+
+            if not photo_ids:
+                raise ValueError("No photos were successfully uploaded")
+
+            print(f"All photos uploaded. Photo IDs: {photo_ids}")
+
+            # Now create the post with all photo IDs
+            post_data = {
+                "message": message,
+                "attached_media": json.dumps(photo_ids)
+            }
+            print(f"Creating post with data: {post_data}")
 
             post = self.api_client.put_object(
-                page_id, "feed", message=message, attached_media=json.dumps(photo_ids)
+                page_id,
+                "feed",
+                **post_data
             )
-            print("Multi-photo post published successfully.")
-            print(self._format_post_result(post))
+            print(f"Post creation response: {post}")
+
+            print(f"Multi-photo post published successfully. Post ID: {post.get('id')}")
             return post
-        except requests.RequestException as e:
+        except Exception as e:
             print(f"Error publishing multi-photo post: {e}")
+            print("Traceback:")
+            traceback.print_exc()
             return None
 
     def publish_video_post(
@@ -255,11 +297,16 @@ class FbPostManager:
         except Exception as e:
             print(f"Unexpected error publishing video post: {e}")
             return None
-        
+
     def publish_reel(
-        self, page_id: str, message: str, video_path: str, title: Optional[str] = None, is_reel: bool = True
+        self,
+        page_id: str,
+        message: str,
+        video_path: str,
+        title: Optional[str] = None,
+        is_reel: bool = True,
     ) -> Optional[Dict]:
-        """ Publishes reel to a Facebook Page."""
+        """Publishes reel to a Facebook Page."""
         try:
             with open(video_path, "rb") as video_file:
                 video_data = {
@@ -273,7 +320,9 @@ class FbPostManager:
                 reel = self.api_client.put_object(
                     page_id, "videos", data=video_data, files=files
                 )
-            print(f"Video {'reel' if is_reel else 'post'} published successfully. Post ID: {reel.get('id')}")
+            print(
+                f"Video {'reel' if is_reel else 'post'} published successfully. Post ID: {reel.get('id')}"
+            )
             return reel
         except requests.RequestException as e:
             print(f"Error publishing video {'reel' if is_reel else 'post'}: {e}")
@@ -281,9 +330,10 @@ class FbPostManager:
                 print(f"Response content: {e.response.content}")
             return None
         except Exception as e:
-            print(f"Unexpected error publishing video {'reel' if is_reel else 'post'}: {e}")
+            print(
+                f"Unexpected error publishing video {'reel' if is_reel else 'post'}: {e}"
+            )
             return None
-
 
     def _format_reel_result(self, reel: Dict[str, Any]) -> str:
         """Formats the reel result into a friendly string."""
@@ -363,4 +413,3 @@ class FbPostManager:
 
 
 # ... (Other methods for publishing multi-photo and video posts will be added later)
-

@@ -1,6 +1,6 @@
 import os
 import json
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fb_post_tracker import FbPostTracker
 from fb_post_manager import FbPostManager
 from fb_api_client import FbApiClient
@@ -63,7 +63,11 @@ def get_media_paths(post_data: dict, source_path: str) -> List[str]:
     media_sources = post_data.get(
         "Media Souce links separated by comma", ""
     )  # Note the typo in "Souce"
-    paths = [os.path.join(source_path, path.strip()) for path in media_sources.split(",") if path.strip()]
+    paths = [
+        os.path.join(source_path, path.strip())
+        for path in media_sources.split(",")
+        if path.strip()
+    ]
     print(f"Media paths: {paths}")
     return paths
 
@@ -79,7 +83,7 @@ def get_media_titles(post_data: dict) -> List[str]:
 
 def main():
     # Load Facebook configuration
-    config_file = r"..\config_files\FB_JK_JK Travel_JK Travel_config.json"
+    config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_JK_JK Travel_JK Travel_config.json"
     fb_config = load_fb_config(config_file)
     credentials = load_credentials(fb_config)
 
@@ -115,7 +119,7 @@ def main():
     message = compose_message(post_data)
     media_paths = get_media_paths(post_data, source_path)
     media_titles = get_media_titles(post_data)
-    post_id: Optional[str] = None
+    post_result: Optional[Dict[str, Any]] = None
 
     print(f"Attempting to publish {post_type} post")
     try:
@@ -125,10 +129,12 @@ def main():
                 raise FileNotFoundError(f"Media file not found: {path}")
 
         if post_type == "text":
-            post_id = fb_post_manager.publish_text_post(credentials["page_id"], message)
+            post_result = fb_post_manager.publish_text_post(
+                credentials["page_id"], message
+            )
         elif post_type == "single photo":
             if media_paths:
-                post_id = fb_post_manager.publish_photo_post(
+                post_result = fb_post_manager.publish_photo_post(
                     credentials["page_id"], message, media_paths[0]
                 )
             else:
@@ -136,13 +142,15 @@ def main():
                     f"No media path provided for single photo post. Post data: {post_data}"
                 )
         elif post_type == "multiple photo":
-            post_id = fb_post_manager.publish_multi_photo_post(
-                credentials["page_id"], message, media_paths
+            post_result = fb_post_manager.publish_multi_photo_post(
+                credentials["page_id"],
+                message,
+                media_paths  # This is already a list of file paths
             )
         elif post_type == "video":
             if media_paths:
                 title = media_titles[0] if media_titles else None
-                post_id = fb_post_manager.publish_video_post(
+                post_result = fb_post_manager.publish_video_post(
                     credentials["page_id"], message, media_paths[0], title
                 )
             else:
@@ -150,7 +158,7 @@ def main():
         elif post_type == "reel":
             if media_paths:
                 title = media_titles[0] if media_titles else None
-                post_id = fb_post_manager.publish_reel(
+                post_result = fb_post_manager.publish_reel(
                     credentials["page_id"], message, media_paths[0], title
                 )
             else:
@@ -159,11 +167,14 @@ def main():
             print(f"Unknown post type: {post_type}")
             return
 
-        if post_id:
-            print(f"Successfully published {post_type} post with ID: {post_id}")
+        if post_result:
+            print(
+                f"Successfully published {post_type} post with ID: {post_result.get('id') or post_result.get('post_id')}"
+            )
             print("Updating spreadsheet with published information")
-            tracker.mark_post_as_published(post_data["row_index"], post_id)
-            tracker.add_post_to_published_log(post_data, post_id)
+            tracker.mark_post_as_published(post_data["row_index"], post_result)
+            tracker.add_post_to_published_log(post_data, post_result)
+            print("Finished updating spreadsheet")  # Add this line for debugging
         else:
             print(f"Failed to publish {post_type} post")
             print("Updating spreadsheet with failure status")

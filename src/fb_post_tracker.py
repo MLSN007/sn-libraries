@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from google_sheets_handler import GoogleSheetsHandler
+    from google_sheets_handler import GoogleSheetsHandler
 
 
 class FbPostTracker:
@@ -29,28 +29,32 @@ class FbPostTracker:
 
     def mark_post_as_published(self, row_index: int, post_result: Dict[str, Any]) -> None:
         range_name = f"'to publish'!L{row_index}:N{row_index}"
-        post_id = post_result.get('id') or post_result.get('post_id')
+        post_id = post_result.get('post_id') or post_result.get('id')
         created_time = post_result.get('created_time', '')
         values = [["Y", created_time, post_id]]
-        self.handler.write_to_spreadsheet(self.spreadsheet_id, range_name, values)
+        self.handler.update_spreadsheet(self.spreadsheet_id, range_name, values)
 
     def add_post_to_published_log(self, post_data: Dict[str, Any], post_result: Dict[str, Any]) -> None:
-        range_name = "'published'!A:F"
-        post_id = post_result.get('id') or post_result.get('post_id')
+        range_name = "'published'!A:F"  # Changed to include 6 columns (A to F)
+        post_id = post_result.get('post_id') or post_result.get('id')
         created_time = post_result.get('created_time', '')
         values = [
             [
-                post_data.get("#", ""),
-                post_data.get("Subject", ""),
-                post_data.get("Type", ""),
-                "Y",
-                created_time,
-                post_id,
+                post_data.get("Ref #", ""),  # Column A
+                post_data.get("Subject", ""),  # Column B
+                post_data.get("Type", ""),  # Column C
+                "Y",  # Column D (Published? Y/N)
+                created_time,  # Column E (Date and Time)
+                post_id,  # Column F (ID (str.))
             ]
         ]
-        self.handler.append_to_spreadsheet(self.spreadsheet_id, range_name, values)
+        result = self.handler.append_to_spreadsheet(self.spreadsheet_id, range_name, values)
+        if result:
+            print(f"Successfully added post to published log: {post_id}")
+        else:
+            print(f"Failed to add post to published log: {post_id}")
 
     def update_post_status(self, row_index: int, status: str) -> None:
         range_name = f"'to publish'!L{row_index}"
         values = [[status]]
-        self.handler.write_to_spreadsheet(self.spreadsheet_id, range_name, values)
+        self.handler.update_spreadsheet(self.spreadsheet_id, range_name, values)

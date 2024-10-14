@@ -19,6 +19,7 @@ import os
 from typing import Dict, Optional, Any
 import requests
 import facebook
+import traceback
 
 
 class FbApiClient:
@@ -87,16 +88,33 @@ class FbApiClient:
 
     def put_object(self, parent_object: str, connection_name: str, **data):
         try:
-            return self.graph.put_object(parent_object, connection_name, **data)
+            print(f"Putting object to {parent_object}/{connection_name}")
+            print(f"Data: {data}")
+            result = self.graph.put_object(parent_object, connection_name, **data)
+            print(f"Put object result: {result}")
+            return result
         except facebook.GraphAPIError as e:
-            print(f"Facebook API Error: {e}")
+            print(f"Facebook API Error in put_object: {e}")
+            print("Traceback:")
+            traceback.print_exc()
             raise
 
     def put_photo(self, image, message=None, album_path="me/photos", **kwargs):
         try:
-            return self.graph.put_photo(image=image, message=message, album_path=album_path, **kwargs)
+            print(f"Putting photo to {album_path}")
+            print(f"Message: {message}")
+            print(f"Additional kwargs: {kwargs}")
+            result = self.graph.put_photo(image=image, message=message, album_path=album_path, **kwargs)
+            print(f"Put photo result: {result}")
+            return result
         except facebook.GraphAPIError as e:
-            print(f"Facebook API Error: {e}")
+            print(f"Facebook API Error in put_photo: {e}")
+            print(f"Error type: {type(e)}")
+            print(f"Error code: {getattr(e, 'code', 'N/A')}")
+            print(f"Error subcode: {getattr(e, 'subcode', 'N/A')}")
+            print(f"Error message: {getattr(e, 'message', 'N/A')}")
+            print("Traceback:")
+            traceback.print_exc()
             raise
 
     # Add more methods as needed
