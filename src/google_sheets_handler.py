@@ -7,6 +7,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.oauth2 import service_account
+from datetime import datetime
 
 
 class GoogleSheetsHandler:
@@ -219,3 +220,7 @@ class GoogleSheetsHandler:
     ) -> None:
         # Implementation
         pass
+
+    def get_current_datetime(self) -> str:
+        """Get the current date and time as a formatted string."""
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")

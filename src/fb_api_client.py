@@ -18,6 +18,7 @@ Attributes:
 import os
 from typing import Dict, Optional, Any
 import requests
+import facebook
 
 
 class FbApiClient:
@@ -42,15 +43,9 @@ class FbApiClient:
 
     """
 
-    def __init__(
-        self,
-        access_token: str,
-        api_version: str = "v20.0",
-    ) -> None:
-
-        self.access_token = access_token
-        self.api_version = api_version
-        self.base_url = f"https://graph.facebook.com/{self.api_version}/"
+    def __init__(self, credentials: Dict[str, str]):
+        self.credentials = credentials
+        self.graph = facebook.GraphAPI(access_token=credentials['access_token'], version="3.1")
 
     def make_request(
         self,
@@ -90,17 +85,19 @@ class FbApiClient:
         endpoint = f"{object_id}/{connection_name}"
         return self.make_request(endpoint, params=kwargs)
 
-    def put_object(
-        self,
-        parent_object: str,
-        connection_name: str,
-        data: Optional[Dict] = None,
-        files: Optional[Dict] = None,
-    ) -> Dict[str, Any]:
-        endpoint = f"{parent_object}/{connection_name}"
-        if data and "access_token" not in data:
-            data["access_token"] = self.access_token
-        print(f"Sending request to {endpoint} with data: {data}")
-        return self.make_request(endpoint, method="POST", data=data, files=files)
+    def put_object(self, parent_object: str, connection_name: str, **data):
+        try:
+            return self.graph.put_object(parent_object, connection_name, **data)
+        except facebook.GraphAPIError as e:
+            print(f"Facebook API Error: {e}")
+            raise
+
+    def put_photo(self, image, message=None, album_path="me/photos", **kwargs):
+        try:
+            return self.graph.put_photo(image=image, message=message, album_path=album_path, **kwargs)
+        except facebook.GraphAPIError as e:
+            print(f"Facebook API Error: {e}")
+            raise
 
     # Add more methods as needed
+

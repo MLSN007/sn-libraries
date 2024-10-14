@@ -27,21 +27,25 @@ class FbPostTracker:
         print("No unpublished posts found.")
         return None
 
-    def mark_post_as_published(self, row_index: int, post_id: str) -> None:
+    def mark_post_as_published(self, row_index: int, post_result: Dict[str, Any]) -> None:
         range_name = f"'to publish'!L{row_index}:N{row_index}"
-        values = [["Y", self.handler.get_current_datetime(), post_id]]
+        post_id = post_result.get('id') or post_result.get('post_id')
+        created_time = post_result.get('created_time', '')
+        values = [["Y", created_time, post_id]]
         self.handler.write_to_spreadsheet(self.spreadsheet_id, range_name, values)
 
-    def add_post_to_published_log(self, post_data: Dict[str, Any]) -> None:
+    def add_post_to_published_log(self, post_data: Dict[str, Any], post_result: Dict[str, Any]) -> None:
         range_name = "'published'!A:F"
+        post_id = post_result.get('id') or post_result.get('post_id')
+        created_time = post_result.get('created_time', '')
         values = [
             [
                 post_data.get("#", ""),
                 post_data.get("Subject", ""),
                 post_data.get("Type", ""),
                 "Y",
-                self.handler.get_current_datetime(),
-                post_data.get("ID (str.)", ""),
+                created_time,
+                post_id,
             ]
         ]
         self.handler.append_to_spreadsheet(self.spreadsheet_id, range_name, values)

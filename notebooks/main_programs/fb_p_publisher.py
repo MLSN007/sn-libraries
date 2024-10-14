@@ -57,11 +57,13 @@ def compose_message(post_data: dict) -> str:
     return message
 
 
-def get_media_paths(post_data: dict) -> List[str]:
+def get_media_paths(post_data: dict, source_path: str) -> List[str]:
     """Get the list of media paths from the post data."""
     print("Getting media paths")
-    media_sources = post_data.get("Media Souce links separated by comma", "")  # Note the typo in "Souce"
-    paths = [path.strip() for path in media_sources.split(",") if path.strip()]
+    media_sources = post_data.get(
+        "Media Souce links separated by comma", ""
+    )  # Note the typo in "Souce"
+    paths = [os.path.join(source_path, path.strip()) for path in media_sources.split(",") if path.strip()]
     print(f"Media paths: {paths}")
     return paths
 
@@ -88,6 +90,10 @@ def main():
         f"Google Sheets configuration - Account ID: {account_id}, Spreadsheet ID: {spreadsheet_id}"
     )
 
+    # Define the source path for media files
+    source_path = r"C:\Users\manue\Downloads\tests"
+    print(f"Source path for media files: {source_path}")
+
     # Initialize the necessary components
     print("Initializing API client, post tracker, and post manager")
     api_client = FbApiClient(credentials)
@@ -107,12 +113,17 @@ def main():
     print(f"Post type: {post_type}")
 
     message = compose_message(post_data)
-    media_paths = get_media_paths(post_data)
+    media_paths = get_media_paths(post_data, source_path)
     media_titles = get_media_titles(post_data)
     post_id: Optional[str] = None
 
     print(f"Attempting to publish {post_type} post")
     try:
+        # Check if media files exist
+        for path in media_paths:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"Media file not found: {path}")
+
         if post_type == "text":
             post_id = fb_post_manager.publish_text_post(credentials["page_id"], message)
         elif post_type == "single photo":
@@ -121,7 +132,9 @@ def main():
                     credentials["page_id"], message, media_paths[0]
                 )
             else:
-                raise ValueError(f"No media path provided for single photo post. Post data: {post_data}")
+                raise ValueError(
+                    f"No media path provided for single photo post. Post data: {post_data}"
+                )
         elif post_type == "multiple photo":
             post_id = fb_post_manager.publish_multi_photo_post(
                 credentials["page_id"], message, media_paths
@@ -150,12 +163,16 @@ def main():
             print(f"Successfully published {post_type} post with ID: {post_id}")
             print("Updating spreadsheet with published information")
             tracker.mark_post_as_published(post_data["row_index"], post_id)
-            tracker.add_post_to_published_log(post_data)
+            tracker.add_post_to_published_log(post_data, post_id)
         else:
             print(f"Failed to publish {post_type} post")
             print("Updating spreadsheet with failure status")
             tracker.update_post_status(post_data["row_index"], "Failed")
 
+    except FileNotFoundError as e:
+        print(f"Error: {str(e)}")
+        print("Updating spreadsheet with error status")
+        tracker.update_post_status(post_data["row_index"], "Error: File not found")
     except Exception as e:
         print(f"Error publishing {post_type} post: {str(e)}")
         print(f"Full post data: {post_data}")

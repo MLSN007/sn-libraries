@@ -164,21 +164,16 @@ class FbPostManager:
             print(f"Error publishing post: {e}")
             return None
 
-    def publish_photo_post(
-        self, page_id: str, message: str, photo_path: str
-    ) -> Optional[Dict[str, Any]]:
+    def publish_photo_post(self, page_id: str, message: str, photo_path: str) -> Optional[Dict[str, Any]]:
         """Publishes a photo post with a message on a Facebook Page."""
         try:
             with open(photo_path, "rb") as image_file:
-                post = self.api_client.put_object(
-                    page_id,
-                    "photos",
-                    files={"source": image_file},
-                    data={"message": message},
+                post = self.api_client.put_photo(
+                    image=image_file,
+                    message=message,
+                    album_path=f"{page_id}/photos"
                 )
-            print(
-                f"Post with photo published successfully. Post ID: {post.get('post_id') or post.get('id')}"
-            )
+            print(f"Post with photo published successfully. Post ID: {post.get('post_id') or post.get('id')}")
             return post
         except Exception as e:
             print(f"Error publishing post with photo: {e}")
@@ -368,3 +363,4 @@ class FbPostManager:
 
 
 # ... (Other methods for publishing multi-photo and video posts will be added later)
+
