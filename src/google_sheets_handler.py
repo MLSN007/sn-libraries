@@ -206,9 +206,16 @@ class GoogleSheetsHandler:
 
     def read_range(self, spreadsheet_id: str, range_name: str) -> List[List[Any]]:
         # Implementation
+        pass
 
-    def write_range(self, spreadsheet_id: str, range_name: str, values: List[List[Any]]) -> None:
+    def write_range(
+        self, spreadsheet_id: str, range_name: str, values: List[List[Any]]
+    ) -> None:
         # Implementation
+        pass
 
-    def append_row(self, spreadsheet_id: str, sheet_name: str, values: List[Any]) -> None:
+    def append_row(
+        self, spreadsheet_id: str, sheet_name: str, values: List[Any]
+    ) -> None:
         # Implementation
+        pass
