@@ -1,6 +1,7 @@
 import os
 from typing import List
 
+
 class PostComposer:
     def __init__(self, source_path: str):
         self.source_path = source_path

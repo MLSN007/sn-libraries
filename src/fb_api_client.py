@@ -46,7 +46,9 @@ class FbApiClient:
 
     def __init__(self, credentials: Dict[str, str]):
         self.credentials = credentials
-        self.graph = facebook.GraphAPI(access_token=credentials['access_token'], version="3.1")
+        self.graph = facebook.GraphAPI(
+            access_token=credentials["access_token"], version="3.1"
+        )
 
     def make_request(
         self,
@@ -104,7 +106,9 @@ class FbApiClient:
             print(f"Putting photo to {album_path}")
             print(f"Message: {message}")
             print(f"Additional kwargs: {kwargs}")
-            result = self.graph.put_photo(image=image, message=message, album_path=album_path, **kwargs)
+            result = self.graph.put_photo(
+                image=image, message=message, album_path=album_path, **kwargs
+            )
             print(f"Put photo result: {result}")
             return result
         except facebook.GraphAPIError as e:
@@ -118,4 +122,3 @@ class FbApiClient:
             raise
 
     # Add more methods as needed
-
