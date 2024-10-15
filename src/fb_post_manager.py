@@ -154,31 +154,30 @@ class FbPostManager:
             print(f"Error retrieving shares for post {post_id}: {e}")
             return []
 
-    def publish_text_post(self, page_id: str, message: str) -> Optional[Dict[str, Any]]:
-        """Publishes a text-only post on a Facebook Page."""
+    def publish_text_post(self, page_id: str, message: str, location: Optional[str] = None) -> Optional[Dict[str, Any]]:
         try:
-            post = self.api_client.put_object(
-                page_id, "feed", data={"message": message}
-            )
-            print(f"Post published successfully. Post ID: {post['id']}")
+            post_data = {"message": message}
+            if location:
+                post_data["place"] = location
+            post = self.api_client.put_object(page_id, "feed", **post_data)
+            print(f"Text post published successfully. Post ID: {post.get('id')}")
             return post
         except Exception as e:
-            print(f"Error publishing post: {e}")
+            print(f"Error publishing text post: {e}")
             return None
 
-    def publish_photo_post(
-        self, page_id: str, message: str, photo_path: str
-    ) -> Optional[Dict[str, Any]]:
-        """Publishes a photo post with a message on a Facebook Page."""
+    def publish_photo_post(self, page_id: str, message: str, photo_path: str, location: Optional[str] = None) -> Optional[Dict[str, Any]]:
         try:
             with open(photo_path, "rb") as image_file:
+                post_data = {"message": message}
+                if location:
+                    post_data["place"] = location
                 post = self.api_client.put_photo(
-                    image=image_file, message=message, album_path=f"{page_id}/photos"
+                    image=image_file, 
+                    album_path=f"{page_id}/photos",
+                    **post_data
                 )
-            print(
-                f"Post with photo published successfully. Post ID: {post.get('post_id') or post.get('id')}"
-            )
-            # Add media_id to the post result
+            print(f"Post with photo published successfully. Post ID: {post.get('post_id') or post.get('id')}")
             post['media_ids'] = [post.get('id')]
             return post
         except Exception as e:
@@ -209,9 +208,9 @@ class FbPostManager:
         return formatted_result
 
     def publish_multi_photo_post(
-        self, page_id: str, message: str, photo_paths: List[str], media_titles: List[str], max_retries: int = 3
+        self, page_id: str, message: str, photo_paths: List[str], media_titles: List[str], 
+        location: Optional[str] = None, max_retries: int = 3
     ) -> Optional[Dict]:
-        """Publishes a post with multiple photos to a Facebook Page."""
         try:
             print(f"Attempting to publish multi-photo post to page_id: {page_id}")
             print(f"Message: {message}")
@@ -259,11 +258,12 @@ class FbPostManager:
 
             print(f"All photos uploaded. Photo IDs: {photo_ids}")
 
-            # Now create the post with all photo IDs
             post_data = {
                 "message": message,
                 "attached_media": json.dumps(photo_ids)
             }
+            if location:
+                post_data["place"] = location
             print(f"Creating post with data: {post_data}")
 
             post = self.api_client.put_object(
@@ -285,22 +285,23 @@ class FbPostManager:
             return None
 
     def publish_video_post(
-        self, page_id: str, message: str, video_path: str, title: Optional[str] = None
+        self, page_id: str, message: str, video_path: str, title: Optional[str] = None,
+        location: Optional[str] = None
     ) -> Optional[Dict]:
-        """Publishes a video post to a Facebook Page."""
         try:
             with open(video_path, "rb") as video_file:
                 video_data = {
                     "description": message,
                     "title": title if title else "Uploaded video",
                 }
+                if location:
+                    video_data["place"] = location
                 files = {"source": video_file}
 
                 post = self.api_client.put_object(
                     page_id, "videos", data=video_data, files=files
                 )
             print(f"Video post published successfully. Post ID: {post.get('id')}")
-            # Add media_id to the post result
             post['media_ids'] = [post.get('id')]
             return post
         except requests.RequestException as e:
@@ -313,14 +314,9 @@ class FbPostManager:
             return None
 
     def publish_reel(
-        self,
-        page_id: str,
-        message: str,
-        video_path: str,
-        title: Optional[str] = None,
-        is_reel: bool = True,
+        self, page_id: str, message: str, video_path: str, title: Optional[str] = None,
+        location: Optional[str] = None, is_reel: bool = True
     ) -> Optional[Dict]:
-        """Publishes reel to a Facebook Page."""
         try:
             with open(video_path, "rb") as video_file:
                 video_data = {
@@ -329,15 +325,14 @@ class FbPostManager:
                 }
                 if is_reel:
                     video_data["is_reel"] = "true"
+                if location:
+                    video_data["place"] = location
                 files = {"source": video_file}
 
                 reel = self.api_client.put_object(
                     page_id, "videos", data=video_data, files=files
                 )
-            print(
-                f"Video {'reel' if is_reel else 'post'} published successfully. Post ID: {reel.get('id')}"
-            )
-            # Add media_id to the post result
+            print(f"Video {'reel' if is_reel else 'post'} published successfully. Post ID: {reel.get('id')}")
             reel['media_ids'] = [reel.get('id')]
             return reel
         except requests.RequestException as e:
@@ -346,9 +341,7 @@ class FbPostManager:
                 print(f"Response content: {e.response.content}")
             return None
         except Exception as e:
-            print(
-                f"Unexpected error publishing video {'reel' if is_reel else 'post'}: {e}"
-            )
+            print(f"Unexpected error publishing video {'reel' if is_reel else 'post'}: {e}")
             return None
 
     def _format_reel_result(self, reel: Dict[str, Any]) -> str:

@@ -119,6 +119,7 @@ def main():
     message = compose_message(post_data)
     media_paths = get_media_paths(post_data, source_path)
     media_titles = get_media_titles(post_data)
+    location = post_data.get("location", "").strip()  # Extract location
     post_result: Optional[Dict[str, Any]] = None
 
     print(f"Attempting to publish {post_type} post")
@@ -130,12 +131,12 @@ def main():
 
         if post_type == "text":
             post_result = fb_post_manager.publish_text_post(
-                credentials["page_id"], message
+                credentials["page_id"], message, location
             )
         elif post_type == "single photo":
             if media_paths:
                 post_result = fb_post_manager.publish_photo_post(
-                    credentials["page_id"], message, media_paths[0]
+                    credentials["page_id"], message, media_paths[0], location
                 )
             else:
                 raise ValueError(
@@ -149,13 +150,14 @@ def main():
                 credentials["page_id"],
                 message,
                 media_paths,
-                media_titles
+                media_titles,
+                location
             )
         elif post_type == "video":
             if media_paths:
                 title = media_titles[0] if media_titles else None
                 post_result = fb_post_manager.publish_video_post(
-                    credentials["page_id"], message, media_paths[0], title
+                    credentials["page_id"], message, media_paths[0], title, location
                 )
             else:
                 raise ValueError("No media path provided for video post")
@@ -163,7 +165,7 @@ def main():
             if media_paths:
                 title = media_titles[0] if media_titles else None
                 post_result = fb_post_manager.publish_reel(
-                    credentials["page_id"], message, media_paths[0], title
+                    credentials["page_id"], message, media_paths[0], title, location
                 )
             else:
                 raise ValueError("No media path provided for reel post")
