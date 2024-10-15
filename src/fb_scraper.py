@@ -5,32 +5,33 @@ import time
 import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 
 class FbScraper:
-    """A class for scraping Facebook pages using Selenium.
-
-    This class provides methods to retrieve recent posts from a Facebook page
-    and extract user, page, and group IDs.
-
-    Attributes:
-        driver: The Selenium WebDriver instance.
-    """
+    """A class for scraping Facebook pages using Selenium."""
 
     def __init__(self):
         """Initialize the FbScraper with a Selenium WebDriver."""
-        # Specify the path to your ChromeDriver executable
-        chrome_driver_path = r"C:\Users\manue\chrome-win64\chromedriver.exe"
-        
-        # Create a Service object
-        service = Service(chrome_driver_path)
-        
-        # Initialize the Chrome WebDriver with the Service object
-        self.driver = webdriver.Chrome(service=service)
-        self.driver.implicitly_wait(10)  # Wait up to 10 seconds for elements to appear
+        try:
+            # Specify the path to your ChromeDriver executable
+            chrome_driver_path = r"C:\Users\manue\chrome-win64\chromedriver.exe"
+            
+            # Set up Chrome options
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")  # Run in headless mode (optional)
+            
+            # Create a Service object
+            service = Service(chrome_driver_path)
+            
+            # Initialize the Chrome WebDriver with the Service object and options
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            self.driver.implicitly_wait(10)
+        except WebDriverException as e:
+            raise Exception(f"Failed to initialize WebDriver: {e}")
 
     def __del__(self):
         """Close the browser when the FbScraper instance is destroyed."""
@@ -54,104 +55,90 @@ class FbScraper:
         # Implement Selenium-based post scraping here if needed
         return []
 
-    def get_user_id(self, username: str) -> Optional[str]:
-        """Attempts to retrieve the user ID for a given public Facebook username.
+    def get_entity_id(self, entity_type: str, entity_name: str) -> Optional[str]:
+        """
+        Scrape a Facebook entity (user, page, or group) and return its ID.
 
         Args:
-            username (str): The Facebook username to look up.
+            entity_type (str): The type of entity to scrape ('user', 'page', or 'group').
+            entity_name (str): The name or username of the entity to scrape.
 
         Returns:
-            Optional[str]: The user ID if found, None otherwise.
+            Optional[str]: The ID of the entity if found, None otherwise.
+
+        Raises:
+            ValueError: If an invalid entity type is provided.
+        """
+        if entity_type == 'user':
+            return self.get_user_id(entity_name)
+        elif entity_type == 'page':
+            return self.get_page_id(entity_name)
+        elif entity_type == 'group':
+            return self.get_group_id(entity_name)
+        else:
+            raise ValueError(f"Invalid entity type: {entity_type}")
+
+    def _scrape_id(self, url: str, id_pattern: str, alternative_method: callable) -> Optional[str]:
+        """
+        Helper method to scrape entity IDs.
+
+        Args:
+            url (str): The URL to scrape.
+            id_pattern (str): The regex pattern to search for the ID.
+            alternative_method (callable): A function to call if the primary method fails.
+
+        Returns:
+            Optional[str]: The scraped ID if found, None otherwise.
         """
         try:
-            self.driver.get(f"https://www.facebook.com/{username}")
-            time.sleep(2)  # Wait for any redirects or JavaScript to load
+            self.driver.get(url)
+            WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-            # Look for the user ID in the page source
             page_source = self.driver.page_source
-            match = re.search(r'"userID":"(\d+)"', page_source)
+            match = re.search(id_pattern, page_source)
             if match:
                 return match.group(1)
 
-            # If not found, try an alternative method
-            entity_id = self.driver.find_element(By.XPATH, "//meta[@property='al:android:url']")
-            if entity_id:
-                match = re.search(r'fb://profile/(\d+)', entity_id.get_attribute('content'))
-                if match:
-                    return match.group(1)
+            return alternative_method()
+        except TimeoutException:
+            print(f"Timeout while loading {url}")
+        except NoSuchElementException:
+            print(f"Required element not found on {url}")
+        except WebDriverException as e:
+            print(f"WebDriver error while scraping {url}: {e}")
+        return None
 
-            return None
-        except Exception as e:
-            print(f"Error retrieving user ID for {username}: {e}")
-            return None
+    def get_user_id(self, username: str) -> Optional[str]:
+        """Attempts to retrieve the user ID for a given public Facebook username."""
+        def alternative():
+            try:
+                entity_id = self.driver.find_element(By.XPATH, "//meta[@property='al:android:url']")
+                match = re.search(r'fb://profile/(\d+)', entity_id.get_attribute('content'))
+                return match.group(1) if match else None
+            except NoSuchElementException:
+                return None
+
+        return self._scrape_id(f"https://www.facebook.com/{username}", r'"userID":"(\d+)"', alternative)
 
     def get_page_id(self, page_name: str) -> Optional[str]:
-        """Attempts to retrieve the page ID for a given Facebook page name.
-
-        Args:
-            page_name (str): The Facebook page name to look up.
-
-        Returns:
-            Optional[str]: The page ID if found, None otherwise.
-        """
-        try:
-            self.driver.get(f"https://www.facebook.com/{page_name}")
-            time.sleep(2)  # Wait for any redirects or JavaScript to load
-
-            # Look for the page ID in the page source
-            page_source = self.driver.page_source
-            match = re.search(r'"pageID":"(\d+)"', page_source)
-            if match:
-                return match.group(1)
-
-            # If not found, try an alternative method
-            entity_id = self.driver.find_element(By.XPATH, "//meta[@property='al:android:url']")
-            if entity_id:
+        """Attempts to retrieve the page ID for a given Facebook page name."""
+        def alternative():
+            try:
+                entity_id = self.driver.find_element(By.XPATH, "//meta[@property='al:android:url']")
                 content = entity_id.get_attribute('content')
                 match = re.search(r'/(\d+)$', content)
-                if match:
-                    page_id = match.group(1)
-                else:
-                    page_id = None
+                return match.group(1) if match else None
             except NoSuchElementException:
-                page_id = None
+                return None
 
-            return page_id
-        except Exception as e:
-            print(f"Error retrieving page ID for {page_name}: {e}")
-            return None
+        return self._scrape_id(f"https://www.facebook.com/{page_name}", r'"pageID":"(\d+)"', alternative)
 
     def get_group_id(self, group_name: str) -> Optional[str]:
-        """Attempts to retrieve the group ID for a given Facebook group name.
-
-        Args:
-            group_name (str): The Facebook group name or URL to look up.
-
-        Returns:
-            Optional[str]: The group ID if found, None otherwise.
-        """
-        try:
-            if "facebook.com/groups/" in group_name:
-                group_url = group_name
-            else:
-                group_url = f"https://www.facebook.com/groups/{group_name}"
-
-            self.driver.get(group_url)
-            time.sleep(2)  # Wait for any redirects or JavaScript to load
-
-            # Look for the group ID in the page source
-            page_source = self.driver.page_source
-            match = re.search(r'"groupID":"(\d+)"', page_source)
-            if match:
-                return match.group(1)
-
-            # If not found, try an alternative method
+        """Attempts to retrieve the group ID for a given Facebook group name."""
+        def alternative():
             current_url = self.driver.current_url
             match = re.search(r'facebook\.com/groups/(\d+)', current_url)
-            if match:
-                return match.group(1)
+            return match.group(1) if match else None
 
-            return None
-        except Exception as e:
-            print(f"Error retrieving group ID for {group_name}: {e}")
-            return None
+        group_url = group_name if "facebook.com/groups/" in group_name else f"https://www.facebook.com/groups/{group_name}"
+        return self._scrape_id(group_url, r'"groupID":"(\d+)"', alternative)
