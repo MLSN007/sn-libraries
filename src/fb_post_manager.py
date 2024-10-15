@@ -178,6 +178,8 @@ class FbPostManager:
             print(
                 f"Post with photo published successfully. Post ID: {post.get('post_id') or post.get('id')}"
             )
+            # Add media_id to the post result
+            post['media_ids'] = [post.get('id')]
             return post
         except Exception as e:
             print(f"Error publishing post with photo: {e}")
@@ -207,29 +209,33 @@ class FbPostManager:
         return formatted_result
 
     def publish_multi_photo_post(
-        self, page_id: str, message: str, photo_paths: List[str], max_retries: int = 3
+        self, page_id: str, message: str, photo_paths: List[str], media_titles: List[str], max_retries: int = 3
     ) -> Optional[Dict]:
         """Publishes a post with multiple photos to a Facebook Page."""
         try:
             print(f"Attempting to publish multi-photo post to page_id: {page_id}")
             print(f"Message: {message}")
             print(f"Photo paths: {photo_paths}")
+            print(f"Media titles: {media_titles}")
 
             photo_ids = []
-            for photo_path in photo_paths:
+            media_ids = []
+            for photo_path, media_title in zip(photo_paths, media_titles):
                 retries = 0
                 while retries < max_retries:
                     try:
                         print(f"Uploading photo: {photo_path} (Attempt {retries + 1})")
+                        print(f"Photo title: {media_title}")
                         with open(photo_path, "rb") as photo_file:
                             photo = self.api_client.put_photo(
                                 image=photo_file,
-                                message=None,
+                                message=media_title,  # Use the media title as the photo caption
                                 album_path=f"{page_id}/photos",
                                 published=False
                             )
                         print(f"Photo upload response: {photo}")
                         photo_ids.append({"media_fbid": photo['id']})
+                        media_ids.append(photo['id'])
                         break  # Successfully uploaded, break the retry loop
                     except Exception as e:
                         print(f"Error uploading photo: {e}")
@@ -264,6 +270,9 @@ class FbPostManager:
             )
             print(f"Post creation response: {post}")
 
+            # Add media_ids to the post result
+            post['media_ids'] = media_ids
+
             print(f"Multi-photo post published successfully. Post ID: {post.get('id')}")
             return post
         except Exception as e:
@@ -288,6 +297,8 @@ class FbPostManager:
                     page_id, "videos", data=video_data, files=files
                 )
             print(f"Video post published successfully. Post ID: {post.get('id')}")
+            # Add media_id to the post result
+            post['media_ids'] = [post.get('id')]
             return post
         except requests.RequestException as e:
             print(f"Error publishing video post: {e}")
@@ -323,6 +334,8 @@ class FbPostManager:
             print(
                 f"Video {'reel' if is_reel else 'post'} published successfully. Post ID: {reel.get('id')}"
             )
+            # Add media_id to the post result
+            reel['media_ids'] = [reel.get('id')]
             return reel
         except requests.RequestException as e:
             print(f"Error publishing video {'reel' if is_reel else 'post'}: {e}")

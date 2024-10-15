@@ -1,5 +1,6 @@
-from typing import Optional, Dict, Any
-    from google_sheets_handler import GoogleSheetsHandler
+from typing import Optional, Dict, Any, List
+from google_sheets_handler import GoogleSheetsHandler
+from datetime import datetime
 
 
 class FbPostTracker:
@@ -27,17 +28,24 @@ class FbPostTracker:
         print("No unpublished posts found.")
         return None
 
-    def mark_post_as_published(self, row_index: int, post_result: Dict[str, Any]) -> None:
-        range_name = f"'to publish'!L{row_index}:N{row_index}"
-        post_id = post_result.get('post_id') or post_result.get('id')
-        created_time = post_result.get('created_time', '')
-        values = [["Y", created_time, post_id]]
+    def mark_post_as_published(
+        self, row_index: int, post_result: Dict[str, Any]
+    ) -> None:
+        range_name = f"'to publish'!L{row_index}:O{row_index}"
+        post_id = post_result.get("post_id") or post_result.get("id")
+        created_time = post_result.get("created_time") or datetime.now().isoformat()
+        media_ids = self.get_media_ids(post_result)
+        # Prefix the post ID with a single quote as well
+        values = [["Y", created_time, f"'{post_id}", media_ids]]
         self.handler.update_spreadsheet(self.spreadsheet_id, range_name, values)
 
-    def add_post_to_published_log(self, post_data: Dict[str, Any], post_result: Dict[str, Any]) -> None:
-        range_name = "'published'!A:F"  # Changed to include 6 columns (A to F)
-        post_id = post_result.get('post_id') or post_result.get('id')
-        created_time = post_result.get('created_time', '')
+    def add_post_to_published_log(
+        self, post_data: Dict[str, Any], post_result: Dict[str, Any]
+    ) -> None:
+        range_name = "'published'!A:G"  # Changed to include 7 columns (A to G)
+        post_id = post_result.get("post_id") or post_result.get("id")
+        created_time = post_result.get("created_time") or datetime.now().isoformat()
+        media_ids = self.get_media_ids(post_result)
         values = [
             [
                 post_data.get("Ref #", ""),  # Column A
@@ -45,10 +53,13 @@ class FbPostTracker:
                 post_data.get("Type", ""),  # Column C
                 "Y",  # Column D (Published? Y/N)
                 created_time,  # Column E (Date and Time)
-                post_id,  # Column F (ID (str.))
+                f"'{post_id}",  # Column F (ID (str.)) - Prefix with single quote
+                media_ids,  # Column G (Media IDs separated by comma)
             ]
         ]
-        result = self.handler.append_to_spreadsheet(self.spreadsheet_id, range_name, values)
+        result = self.handler.append_to_spreadsheet(
+            self.spreadsheet_id, range_name, values
+        )
         if result:
             print(f"Successfully added post to published log: {post_id}")
         else:
@@ -58,3 +69,16 @@ class FbPostTracker:
         range_name = f"'to publish'!L{row_index}"
         values = [[status]]
         self.handler.update_spreadsheet(self.spreadsheet_id, range_name, values)
+
+    def get_media_ids(self, post_result: Dict[str, Any]) -> str:
+        media_ids = []
+        if 'media_ids' in post_result:
+            # If we've stored the media IDs directly in the post_result
+            media_ids = post_result['media_ids']
+        elif 'attachments' in post_result:
+            for attachment in post_result['attachments'].get('data', []):
+                if 'media' in attachment:
+                    media_ids.append(attachment['media'].get('id', ''))
+        
+        # Prefix each media ID with a single quote
+        return ",".join(f"'{id}" for id in media_ids)

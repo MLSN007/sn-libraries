@@ -145,7 +145,8 @@ def main():
             post_result = fb_post_manager.publish_multi_photo_post(
                 credentials["page_id"],
                 message,
-                media_paths  # This is already a list of file paths
+                media_paths,
+                media_titles,  # Pass the media titles
             )
         elif post_type == "video":
             if media_paths:
@@ -174,7 +175,7 @@ def main():
             print("Updating spreadsheet with published information")
             tracker.mark_post_as_published(post_data["row_index"], post_result)
             tracker.add_post_to_published_log(post_data, post_result)
-            print("Finished updating spreadsheet")  # Add this line for debugging
+            print("Finished updating spreadsheet")
         else:
             print(f"Failed to publish {post_type} post")
             print("Updating spreadsheet with failure status")
