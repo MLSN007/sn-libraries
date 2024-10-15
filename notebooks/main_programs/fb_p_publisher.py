@@ -1,91 +1,20 @@
-import os
-import json
-from typing import List, Optional, Dict, Any
+from fb_config_loader import FbConfigLoader
+from fb_api_client import FbApiClient
 from fb_post_tracker import FbPostTracker
 from fb_post_manager import FbPostManager
-from fb_api_client import FbApiClient
+from fb_post_composer import FbPostComposer
+from fb_publishing_orchestrator import FbPublishingOrchestrator
+from error_handler import setup_logging, handle_error
+from google_sheets_handler import GoogleSheetsHandler
 
 
-def load_fb_config(config_file: str) -> dict:
-    """Load the Facebook configuration from a JSON file."""
-    print(f"Loading Facebook configuration from: {config_file}")
-    with open(config_file, "r") as f:
-        config = json.load(f)
-    print("Facebook configuration loaded successfully")
-    return config
-
-
-def load_credentials(fb_config: dict) -> dict:
-    """Load Facebook credentials from environment variables."""
-    print("Loading Facebook credentials from environment variables")
-    credentials = {}
-    try:
-        for key in [
-            "app_id",
-            "app_secret",
-            "access_token",
-            "page_id",
-            "user_id",
-            "user_token",
-        ]:
-            credentials[key] = os.environ[fb_config[key]]
-            print(
-                f"Loaded {key}: {credentials[key][:5]}..."
-            )  # Print first 5 characters for security
-    except KeyError as e:
-        print(
-            f"Error: Environment variable {e} not set. Please set it before running the script."
-        )
-        exit(1)
-    print("Facebook credentials loaded successfully")
-    return credentials
-
-
-def compose_message(post_data: dict) -> str:
-    """Compose the full message for the post."""
-    print("Composing message for the post")
-    message = post_data.get("Post comment", "").strip()
-    hashtags = post_data.get("hashtags separated by blank", "").strip()
-    mentions = post_data.get("mentions separated by blank", "").strip()
-
-    if hashtags:
-        message += f"\n\n{hashtags}"
-    if mentions:
-        message += f"\n\n{mentions}"
-
-    print(f"Composed message: {message[:50]}...")  # Print first 50 characters
-    return message
-
-
-def get_media_paths(post_data: dict, source_path: str) -> List[str]:
-    """Get the list of media paths from the post data."""
-    print("Getting media paths")
-    media_sources = post_data.get(
-        "Media Souce links separated by comma", ""
-    )  # Note the typo in "Souce"
-    paths = [
-        os.path.join(source_path, path.strip())
-        for path in media_sources.split(",")
-        if path.strip()
-    ]
-    print(f"Media paths: {paths}")
-    return paths
-
-
-def get_media_titles(post_data: dict) -> List[str]:
-    """Get the list of media titles from the post data."""
-    print("Getting media titles")
-    media_titles = post_data.get("titles of media source separated by comma", "")
-    titles = [title.strip() for title in media_titles.split(",") if title.strip()]
-    print(f"Media titles: {titles}")
-    return titles
-
-
+@handle_error
 def main():
-    # Load Facebook configuration
+    setup_logging()
+
+    # Load configuration
     config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_JK_JK Travel_JK Travel_config.json"
-    fb_config = load_fb_config(config_file)
-    credentials = load_credentials(fb_config)
+    config_loader = FbConfigLoader(config_file)
 
     # Set up Google Sheets configuration
     account_id = "JK"
@@ -98,111 +27,17 @@ def main():
     source_path = r"C:\Users\manue\Downloads\tests"
     print(f"Source path for media files: {source_path}")
 
-    # Initialize the necessary components
-    print("Initializing API client, post tracker, and post manager")
-    api_client = FbApiClient(credentials)
-    tracker = FbPostTracker(account_id, spreadsheet_id)
-    fb_post_manager = FbPostManager(api_client)
+    # Initialize components
+    api_client = FbApiClient(config_loader.credentials)
+    sheets_handler = GoogleSheetsHandler(account_id)
+    sheets_handler.authenticate()
+    post_tracker = FbPostTracker(sheets_handler, spreadsheet_id)
+    post_composer = FbPostComposer(source_path)
+    post_manager = FbPostManager(api_client, post_composer)
+    orchestrator = FbPublishingOrchestrator(post_tracker, post_manager)
 
-    # Get the next unpublished post
-    print("Getting next unpublished post")
-    post_data = tracker.get_next_unpublished_post()
-    if not post_data:
-        print("No posts to publish")
-        return
-
-    print(f"Post data retrieved: {post_data}")
-
-    post_type = post_data.get("Type", "").lower()
-    print(f"Post type: {post_type}")
-
-    message = compose_message(post_data)
-    media_paths = get_media_paths(post_data, source_path)
-    media_titles = get_media_titles(post_data)
-    location = post_data.get("location", "").strip()  # Extract location
-    post_result: Optional[Dict[str, Any]] = None
-
-    print(f"Attempting to publish {post_type} post")
-    try:
-        # Check if media files exist
-        for path in media_paths:
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"Media file not found: {path}")
-
-        if post_type == "text":
-            post_result = fb_post_manager.publish_text_post(
-                credentials["page_id"], message, location
-            )
-        elif post_type == "single photo":
-            if media_paths:
-                post_result = fb_post_manager.publish_photo_post(
-                    credentials["page_id"], message, media_paths[0], location
-                )
-            else:
-                raise ValueError(
-                    f"No media path provided for single photo post. Post data: {post_data}"
-                )
-        elif post_type == "multiple photo":
-            # Ensure we have at least one title, duplicating it if necessary
-            if len(media_titles) < len(media_paths):
-                media_titles = media_titles * len(media_paths) if media_titles else ["No title"] * len(media_paths)
-            post_result = fb_post_manager.publish_multi_photo_post(
-                credentials["page_id"],
-                message,
-                media_paths,
-                media_titles,
-                location
-            )
-        elif post_type == "video":
-            if media_paths:
-                title = media_titles[0] if media_titles else None
-                post_result = fb_post_manager.publish_video_post(
-                    credentials["page_id"], message, media_paths[0], title, location
-                )
-            else:
-                raise ValueError("No media path provided for video post")
-        elif post_type == "reel":
-            if media_paths:
-                title = media_titles[0] if media_titles else None
-                post_result = fb_post_manager.publish_reel(
-                    credentials["page_id"], message, media_paths[0], title, location
-                )
-            else:
-                raise ValueError("No media path provided for reel post")
-        else:
-            print(f"Unknown post type: {post_type}")
-            return
-
-        if post_result:
-            print(
-                f"Successfully published {post_type} post with ID: {post_result.get('id') or post_result.get('post_id')}"
-            )
-            print("Updating spreadsheet with published information")
-            tracker.mark_post_as_published(post_data["row_index"], post_result)
-            print("Finished updating spreadsheet")
-        else:
-            print(f"Failed to publish {post_type} post")
-            print("Updating spreadsheet with failure status")
-            tracker.update_post_status(post_data["row_index"], "Failed")
-
-    except FileNotFoundError as e:
-        print(f"Error: {str(e)}")
-        print("Updating spreadsheet with error status")
-        tracker.update_post_status(post_data["row_index"], "Error: File not found")
-    except Exception as e:
-        print(f"Error publishing {post_type} post: {str(e)}")
-        print(f"Full post data: {post_data}")
-        print(f"Media paths: {media_paths}")
-        print(f"Media titles: {media_titles}")
-        print("Updating spreadsheet with error status")
-        tracker.update_post_status(post_data["row_index"], "Error")
-
-    # Add this at the end of the main function for debugging
-    print("\nFinal state:")
-    print(f"Post type: {post_type}")
-    print(f"Message: {message}")
-    print(f"Media paths: {media_paths}")
-    print(f"Media titles: {media_titles}")
+    # Publish next post
+    orchestrator.publish_next_post()
 
 
 if __name__ == "__main__":

@@ -34,6 +34,8 @@ import requests
 import os
 import traceback
 import random
+from fb_api_client import FbApiClient
+from fb_post_composer import FbPostComposer
 
 
 class FbPostManager:
@@ -43,8 +45,9 @@ class FbPostManager:
         api_client (FacebookAPIClient): An instance of the FacebookAPIClient for API interaction.
     """
 
-    def __init__(self, api_client: "FacebookAPIClient") -> None:
+    def __init__(self, api_client: FbApiClient, post_composer: FbPostComposer) -> None:
         self.api_client = api_client
+        self.post_composer = post_composer
 
     def get_latest_posts(
         self, page_id: str, num_posts: int = 10, fields: Optional[str] = None
@@ -420,5 +423,35 @@ class FbPostManager:
             print(f"Error sharing video: {e}")
             return None
 
+    def publish_post(self, page_id: str, post_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        post_type = post_data.get("Type", "").lower()
+        message = self.post_composer.compose_message(post_data)
+        media_paths = self.post_composer.get_media_paths(post_data)
+        media_titles = self.post_composer.get_media_titles(post_data)
+        location = post_data.get("location", "").strip()
+
+        if post_type == "text":
+            return self.publish_text_post(page_id, message, location)
+        elif post_type == "single photo":
+            if media_paths:
+                return self.publish_photo_post(page_id, message, media_paths[0], location)
+            else:
+                raise ValueError(f"No media path provided for single photo post. Post data: {post_data}")
+        elif post_type == "multiple photo":
+            return self.publish_multi_photo_post(page_id, message, media_paths, media_titles, location)
+        elif post_type == "video":
+            if media_paths:
+                title = media_titles[0] if media_titles else None
+                return self.publish_video_post(page_id, message, media_paths[0], title, location)
+            else:
+                raise ValueError("No media path provided for video post")
+        elif post_type == "reel":
+            if media_paths:
+                title = media_titles[0] if media_titles else None
+                return self.publish_reel(page_id, message, media_paths[0], title, location)
+            else:
+                raise ValueError("No media path provided for reel post")
+        else:
+            raise ValueError(f"Unknown post type: {post_type}")
 
 # ... (Other methods for publishing multi-photo and video posts will be added later)
