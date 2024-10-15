@@ -10,7 +10,7 @@ class FbPostTracker:
         self.spreadsheet_id = spreadsheet_id
 
     def get_next_unpublished_post(self) -> Optional[Dict[str, Any]]:
-        range_name = "'to publish'!A1:N"
+        range_name = "'to publish'!A1:O"  # Extended to column O for media IDs
         values = self.handler.read_spreadsheet(self.spreadsheet_id, range_name)
 
         if not values or len(values) < 3:
@@ -35,9 +35,9 @@ class FbPostTracker:
         post_id = post_result.get("post_id") or post_result.get("id")
         created_time = post_result.get("created_time") or datetime.now().isoformat()
         media_ids = self.get_media_ids(post_result)
-        # Prefix the post ID with a single quote as well
         values = [["Y", created_time, f"'{post_id}", media_ids]]
         self.handler.update_spreadsheet(self.spreadsheet_id, range_name, values)
+        print(f"Updated 'to publish' sheet for post ID: {post_id}")
 
     def add_post_to_published_log(
         self, post_data: Dict[str, Any], post_result: Dict[str, Any]
@@ -69,16 +69,15 @@ class FbPostTracker:
         range_name = f"'to publish'!L{row_index}"
         values = [[status]]
         self.handler.update_spreadsheet(self.spreadsheet_id, range_name, values)
+        print(f"Updated post status to: {status}")
 
     def get_media_ids(self, post_result: Dict[str, Any]) -> str:
         media_ids = []
         if 'media_ids' in post_result:
-            # If we've stored the media IDs directly in the post_result
             media_ids = post_result['media_ids']
         elif 'attachments' in post_result:
             for attachment in post_result['attachments'].get('data', []):
                 if 'media' in attachment:
                     media_ids.append(attachment['media'].get('id', ''))
         
-        # Prefix each media ID with a single quote
         return ",".join(f"'{id}" for id in media_ids)
