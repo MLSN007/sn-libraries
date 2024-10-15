@@ -142,11 +142,14 @@ def main():
                     f"No media path provided for single photo post. Post data: {post_data}"
                 )
         elif post_type == "multiple photo":
+            # Ensure we have at least one title, duplicating it if necessary
+            if len(media_titles) < len(media_paths):
+                media_titles = media_titles * len(media_paths) if media_titles else ["No title"] * len(media_paths)
             post_result = fb_post_manager.publish_multi_photo_post(
                 credentials["page_id"],
                 message,
                 media_paths,
-                media_titles,  # Pass the media titles
+                media_titles
             )
         elif post_type == "video":
             if media_paths:

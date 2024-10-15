@@ -220,11 +220,14 @@ class FbPostManager:
 
             photo_ids = []
             media_ids = []
-            for photo_path, media_title in zip(photo_paths, media_titles):
+            default_title = media_titles[0] if media_titles else "No title"
+
+            for i, photo_path in enumerate(photo_paths):
                 retries = 0
                 while retries < max_retries:
                     try:
                         print(f"Uploading photo: {photo_path} (Attempt {retries + 1})")
+                        media_title = media_titles[i] if i < len(media_titles) else default_title
                         print(f"Photo title: {media_title}")
                         with open(photo_path, "rb") as photo_file:
                             photo = self.api_client.put_photo(
