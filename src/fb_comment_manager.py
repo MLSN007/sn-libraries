@@ -104,6 +104,8 @@ class FbCommentManager:
             return response
         except Exception as e:
             print(f"Error posting comment: {e}")
+            if hasattr(e, 'response'):
+                print(f"Response content: {e.response.content}")
             return None
 
     def get_comment_replies(
