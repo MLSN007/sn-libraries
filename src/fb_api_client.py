@@ -44,11 +44,13 @@ class FbApiClient:
 
     """
 
-    def __init__(self, credentials: Dict[str, str]):
+    def __init__(self, credentials: Dict[str, str], api_version: str = "3.1"):
         self.credentials = credentials
+        self.api_version = api_version
         self.graph = facebook.GraphAPI(
-            access_token=credentials["access_token"], version="3.1"
+            access_token=credentials["access_token"], version=api_version
         )
+        self.base_url = f"https://graph.facebook.com/v{api_version}/"
 
     def make_request(
         self,
@@ -61,7 +63,7 @@ class FbApiClient:
         url = f"{self.base_url}{endpoint}"
         params = params or {}
         if "access_token" not in params:
-            params["access_token"] = self.access_token
+            params["access_token"] = self.credentials["access_token"]
 
         print(f"Making {method} request to {url}")
         print(f"Params: {params}")
