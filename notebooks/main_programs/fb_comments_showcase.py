@@ -2,12 +2,10 @@
 
 import os
 import time
-import json
+import logging
 from fb_config_loader import FbConfigLoader
 from fb_api_client import FbApiClient
 from fb_comment_manager import FbCommentManager
-from error_handler import setup_logging, handle_error
-import logging
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -17,33 +15,30 @@ logger = logging.getLogger(__name__)
 
 def main():
     try:
-        # Initialize FbApiClient (you may need to adjust this based on your actual implementation)
-        setup_logging()
-
         # Load configuration
-        print("loading config")
-        config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_JK_JK Travel_JK Travel_config.json"
+        config_file = os.path.join(
+            "config_files", "FB_JK_JK Travel_JK Travel_config.json"
+        )
         config_loader = FbConfigLoader(config_file)
-        print("config loaded")
-        fb_client = FbApiClient(config_loader.credentials)
+
+        # Initialize FbApiClient with the correct API version
+        fb_client = FbApiClient(config_loader.credentials, api_version="21.0")
 
         # Initialize FbCommentManager
         comment_manager = FbCommentManager(fb_client)
 
         # Example post ID (replace with an actual post ID from your Facebook page)
-        post_id = "379955691858248_122134659914362482"
+        post_id = "122122055282142170"
 
         # 1. Post a new comment
-        new_comment = comment_manager.post_comment(
-            post_id, "I always liked the Imperial Palace so much!"
-        )
+        new_comment = comment_manager.post_comment(post_id, "interesting")
         if new_comment:
-            print(
+            logger.info(
                 f"New comment posted successfully. Comment ID: {new_comment.get('id')}"
             )
             parent_comment_id = new_comment.get("id")
         else:
-            print("Failed to post new comment.")
+            logger.error("Failed to post new comment. Exiting.")
             return
 
         # Wait a bit to ensure the comment is processed
@@ -51,14 +46,14 @@ def main():
 
         # 2. Post replies to the new comment
         reply1 = comment_manager.post_comment(
-            parent_comment_id, "I couldn't agree more!!!!!"
+            parent_comment_id, "and it seems it foes on during 2024 !!!!!"
         )
-        print(f"Replied to comment {parent_comment_id}: {reply1.get('message')}")
+        logger.info(f"Replied to comment {parent_comment_id}: {reply1.get('message')}")
         time.sleep(6)
         reply2 = comment_manager.post_comment(
             parent_comment_id, "what do you all think?"
         )
-        print(f"Replied to comment {parent_comment_id}: {reply2.get('message')}")
+        logger.info(f"Replied to comment {parent_comment_id}: {reply2.get('message')}")
         time.sleep(9)
 
         # 3. Add reactions to the parent comment
@@ -67,28 +62,24 @@ def main():
         # We'll simulate other reactions for demonstration purposes
         time.sleep(4)
 
-        # 4. Retrieve comments for the post
-        comments = comment_manager.get_post_comments(post_id, limit=10)
-        logger.info(f"Retrieved {len(comments)} comments:")
-        for comment in comments:
-            logger.info(
-                f"- {comment.get('from', {}).get('name')}: {comment.get('message')}"
-            )
+        # ----------- 4 mved below for when the post is not mine ------------
 
         time.sleep(5)
         # 5. Get replies to the parent comment
         replies = comment_manager.get_comment_replies(parent_comment_id)
-        print(f"\nReplies to the parent comment (ID: {parent_comment_id}):")
+        logger.info(f"\nReplies to the parent comment (ID: {parent_comment_id}):")
         for reply in replies:
-            print(f"- {reply.get('from', {}).get('name')}: {reply.get('message')}")
+            logger.info(
+                f"- {reply.get('from', {}).get('name')}: {reply.get('message')}"
+            )
 
         time.sleep(5)
 
         # 6. Get reactions for the parent comment
         reactions = comment_manager.get_comment_reactions(parent_comment_id)
-        print(f"\nReactions to the parent comment (ID: {parent_comment_id}):")
+        logger.info(f"\nReactions to the parent comment (ID: {parent_comment_id}):")
         for reaction_type, count in reactions.items():
-            print(f"- {reaction_type.capitalize()}: {count}")
+            logger.info(f"- {reaction_type.capitalize()}: {count}")
 
         time.sleep(5)
 
@@ -100,9 +91,9 @@ def main():
             # Like the reply
             like_response = comment_manager.react_to_comment(last_reply_id, like=True)
             if like_response:
-                print(f"\nLiked reply: {last_reply_id}")
+                logger.info(f"\nLiked reply: {last_reply_id}")
             else:
-                print(f"\nFailed to like reply: {last_reply_id}")
+                logger.error(f"\nFailed to like reply: {last_reply_id}")
 
             # Reply to the reply
             reply_message = "Thank you for your reply! This is an automated response."
@@ -110,14 +101,22 @@ def main():
                 last_reply_id, message=reply_message
             )
             if reply_response:
-                print(f"Replied to comment {last_reply_id}: {reply_message}")
+                logger.info(f"Replied to comment {last_reply_id}: {reply_message}")
             else:
-                print(f"Failed to reply to comment: {last_reply_id}")
+                logger.error(f"Failed to reply to comment: {last_reply_id}")
         else:
-            print("\nNo replies found to like or respond to.")
+            logger.info("\nNo replies found to like or respond to.")
 
     except Exception as e:
         logger.error(f"An error occurred: {str(e)}", exc_info=True)
+
+        # 4. Retrieve comments for the post
+    comments = comment_manager.get_post_comments(post_id, limit=10)
+    logger.info(f"Retrieved {len(comments)} comments:")
+    for comment in comments:
+        logger.info(
+            f"- {comment.get('from', {}).get('name')}: {comment.get('message')}"
+        )
 
 
 if __name__ == "__main__":

@@ -6,7 +6,9 @@ from fb_post_composer import FbPostComposer
 from fb_publishing_orchestrator import FbPublishingOrchestrator
 from error_handler import setup_logging, handle_error
 from google_sheets_handler import GoogleSheetsHandler
+import logging
 
+logger = logging.getLogger(__name__)
 
 @handle_error
 def main():
@@ -36,9 +38,12 @@ def main():
     post_manager = FbPostManager(api_client, post_composer)
     orchestrator = FbPublishingOrchestrator(post_tracker, post_manager)
 
-    # Publish next post
-    orchestrator.publish_next_post()
+    try:
+        # Publish next post
+        orchestrator.publish_next_post()
 
+    except Exception as e:
+        logger.error(f"An error occurred: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
     main()

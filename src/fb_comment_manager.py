@@ -97,21 +97,12 @@ class FbCommentManager:
             return None
 
     def post_comment(self, post_id: str, message: str) -> Optional[Dict[str, Any]]:
-        """Posts a new comment on a Facebook post.
-
-        Args:
-            post_id (str): The ID of the post to comment on.
-            message (str): The comment message to post.
-
-        Returns:
-            Optional[Dict[str, Any]]: The API response containing the new comment data,
-                or None if an error occurs.
-        """
+        """Posts a new comment on a Facebook post."""
         try:
             response = self.api_client.put_object(post_id, "comments", message=message)
             print(f"Posted comment on post {post_id}: {message}")
             return response
-        except requests.RequestException as e:
+        except Exception as e:
             print(f"Error posting comment: {e}")
             return None
 

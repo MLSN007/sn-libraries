@@ -167,6 +167,7 @@ class FbPostManager:
             return post
         except Exception as e:
             print(f"Error publishing text post: {e}")
+            traceback.print_exc()
             return None
 
     def publish_photo_post(self, page_id: str, message: str, photo_path: str, location: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -185,6 +186,7 @@ class FbPostManager:
             return post
         except Exception as e:
             print(f"Error publishing post with photo: {e}")
+            traceback.print_exc()
             return None
 
     def _format_post_result(self, post: Dict[str, Any]) -> str:
@@ -455,3 +457,4 @@ class FbPostManager:
             raise ValueError(f"Unknown post type: {post_type}")
 
 # ... (Other methods for publishing multi-photo and video posts will be added later)
+

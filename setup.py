@@ -6,7 +6,6 @@ setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[
-        "facebook-sdk~=3.1.0",
         "instagrapi~=2.1.2",
         "hikerapi",
         "requests",

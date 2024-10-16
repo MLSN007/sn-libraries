@@ -10,10 +10,9 @@ Classes:
 
 import logging
 from typing import Dict, Any, Optional
-import requests, re
+import requests
+import re
 from bs4 import BeautifulSoup
-import facebook
-
 from fb_api_client import FbApiClient
 
 
@@ -63,20 +62,11 @@ class FbUtils:
     def get_group_info(
         self, group_id: str, fields: str = "name,description,icon"
     ) -> Dict[str, Any]:
-        """Retrieves basic information about a Facebook group.
-
-        Args:
-            group_id (str): The ID of the Facebook group.
-            fields (str, optional): Comma-separated list of fields to include
-            (e.g., "name,description,icon"). Defaults to "name,description,icon".
-
-        Returns:
-            Dict[str, Any]: A dictionary containing the group's information, or an empty dictionary if an error occurs.
-        """
+        """Retrieves basic information about a Facebook group."""
         try:
             group_data = self.api_client.get_object(group_id, fields=fields)
             return group_data
-        except requests.RequestException as e:
+        except Exception as e:
             print(f"Error retrieving group info: {e}")
             return {}
 

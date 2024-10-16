@@ -18,7 +18,6 @@ Attributes:
 import os
 from typing import Dict, Optional, Any
 import requests
-import facebook
 import traceback
 
 
@@ -44,12 +43,9 @@ class FbApiClient:
 
     """
 
-    def __init__(self, credentials: Dict[str, str], api_version: str = "3.1"):
+    def __init__(self, credentials: Dict[str, str], api_version: str = "21.0"):
         self.credentials = credentials
         self.api_version = api_version
-        self.graph = facebook.GraphAPI(
-            access_token=credentials["access_token"], version=api_version
-        )
         self.base_url = f"https://graph.facebook.com/v{api_version}/"
 
     def make_request(
@@ -65,14 +61,7 @@ class FbApiClient:
         if "access_token" not in params:
             params["access_token"] = self.credentials["access_token"]
 
-        print(f"Making {method} request to {url}")
-        print(f"Params: {params}")
-        print(f"Data: {data}")
-        print(f"Files: {files.keys() if files else None}")
-
         response = requests.request(method, url, params=params, data=data, files=files)
-        print(f"Response status code: {response.status_code}")
-        print(f"Response content: {response.content}")
         response.raise_for_status()
         return response.json()
 
@@ -91,36 +80,14 @@ class FbApiClient:
         return self.make_request(endpoint, params=kwargs)
 
     def put_object(self, parent_object: str, connection_name: str, **data):
-        try:
-            print(f"Putting object to {parent_object}/{connection_name}")
-            print(f"Data: {data}")
-            result = self.graph.put_object(parent_object, connection_name, **data)
-            print(f"Put object result: {result}")
-            return result
-        except facebook.GraphAPIError as e:
-            print(f"Facebook API Error in put_object: {e}")
-            print("Traceback:")
-            traceback.print_exc()
-            raise
+        endpoint = f"{parent_object}/{connection_name}"
+        return self.make_request(endpoint, method="POST", data=data)
 
     def put_photo(self, image, message=None, album_path="me/photos", **kwargs):
-        try:
-            print(f"Putting photo to {album_path}")
-            print(f"Message: {message}")
-            print(f"Additional kwargs: {kwargs}")
-            result = self.graph.put_photo(
-                image=image, message=message, album_path=album_path, **kwargs
-            )
-            print(f"Put photo result: {result}")
-            return result
-        except facebook.GraphAPIError as e:
-            print(f"Facebook API Error in put_photo: {e}")
-            print(f"Error type: {type(e)}")
-            print(f"Error code: {getattr(e, 'code', 'N/A')}")
-            print(f"Error subcode: {getattr(e, 'subcode', 'N/A')}")
-            print(f"Error message: {getattr(e, 'message', 'N/A')}")
-            print("Traceback:")
-            traceback.print_exc()
-            raise
+        files = {"source": image}
+        data = kwargs.copy()
+        if message:
+            data["message"] = message
+        return self.make_request(album_path, method="POST", files=files, data=data)
 
     # Add more methods as needed
