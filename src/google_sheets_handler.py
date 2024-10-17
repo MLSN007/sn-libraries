@@ -3,7 +3,7 @@ import json
 from typing import Optional, List, Dict, Any
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow, Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.oauth2 import service_account
@@ -36,15 +36,19 @@ class GoogleSheetsHandler:
             account_id (str): Identifier for the Google account to use.
             use_oauth (bool): If True, use OAuth flow instead of config file.
         """
+
+
         self.account_id = account_id
         self.use_oauth = use_oauth
         self.config_path = self._get_config_path()
-        self.creds = None
-        self.sheets_service = None
-        self.drive_service = None
+        self.creds: Optional[Credentials] = None
+        self.sheets_service: Optional[Any] = None
+        self.drive_service: Optional[Any] = None
 
     def _get_config_path(self) -> Optional[str]:
         """Get the configuration file path from environment variables."""
+        # Convert account_id to upper case to ensure consistency in environment variable names
+
         env_var = f"GOOGLE_SHEETS_CONFIG_{self.account_id.upper()}"
         config_path = os.getenv(env_var)
         if not self.use_oauth and not config_path:
@@ -69,37 +73,24 @@ class GoogleSheetsHandler:
                 if isinstance(token_data, str):
                     token_data = json.loads(token_data)
                 if isinstance(token_data, dict):
-                    self.creds = Credentials.from_authorized_user_info(
-                        token_data, self.SCOPES
-                    )
+                    self.creds = Credentials.from_authorized_user_info(token_data, self.SCOPES)
                 else:
                     print(f"Invalid token data format: {type(token_data)}")
                     self.creds = None
 
         if not self.creds or not self.creds.valid:
             if self.creds and self.creds.expired and self.creds.refresh_token:
-                try:
-                    self.creds.refresh(Request())
-                except Exception as e:
-                    print(f"Error refreshing credentials: {e}")
-                    self.creds = None
-
-            if not self.creds:
-                client_secrets_file = os.getenv(
-                    f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}"
-                )
+                self.creds.refresh(Request())
+            else:
+                client_secrets_file = os.getenv(f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}")
                 if not client_secrets_file:
-                    raise ValueError(
-                        f"Client secrets file path not set for {self.account_id}"
-                    )
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    client_secrets_file, self.SCOPES
-                )
+                    raise ValueError(f"Client secrets file path not set for {self.account_id}")
+                flow = Flow.from_client_secrets_file(client_secrets_file, self.SCOPES)
                 self.creds = flow.run_local_server(port=0)
 
             if not self.use_oauth and self.config_path:
                 with open(self.config_path, "w") as f:
-                    token_data = json.dumps(json.loads(self.creds.to_json()))
+                    token_data = self.creds.to_json()
                     json.dump({"token": token_data}, f)
 
         self.sheets_service = build("sheets", "v4", credentials=self.creds)

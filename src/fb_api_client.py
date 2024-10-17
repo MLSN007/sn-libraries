@@ -19,6 +19,7 @@ import os
 from typing import Dict, Optional, Any
 import requests
 import traceback
+from requests.exceptions import RequestException
 
 
 class FbApiClient:
@@ -61,9 +62,15 @@ class FbApiClient:
         if "access_token" not in params:
             params["access_token"] = self.credentials["access_token"]
 
-        response = requests.request(method, url, params=params, data=data, files=files)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.request(method, url, params=params, data=data, files=files)
+            response.raise_for_status()
+            return response.json()
+        except RequestException as e:
+            print(f"Error making request to {url}: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response content: {e.response.content}")
+            raise
 
     def get_object(
         self, object_id: str, fields: Optional[str] = None

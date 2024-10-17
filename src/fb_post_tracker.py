@@ -9,20 +9,26 @@ class FbPostTracker:
         self.handler.authenticate()
         self.spreadsheet_id = spreadsheet_id
 
-    def get_next_unpublished_post(self) -> Optional[Dict[str, Any]]:
-        range_name = "'to publish'!A1:O"  # Extended to column O for media IDs
+    def get_next_post(self) -> Optional[Dict[str, Any]]:
+        """Retrieve the next unpublished post from the spreadsheet."""
+        range_name = "'to publish'!A1:P"  # Extended to column P to include all columns
         values = self.handler.read_spreadsheet(self.spreadsheet_id, range_name)
 
-        if not values or len(values) < 3:
+        if not values or len(values) < 3:  # We need at least 3 rows: 2 header rows + 1 data row
             print("No data found or insufficient rows.")
             return None
 
         headers = values[1]  # Use the second row as headers
+        print(f"Headers: {headers}")  # Debug print
 
-        for row_index, row in enumerate(values[2:], start=3):
+        for row_index, row in enumerate(values[2:], start=3):  # Start from the third row, index 3
             row_dict = dict(zip(headers, row + [""] * (len(headers) - len(row))))
-            if row_dict.get("Published? Y/N", "").strip().upper() != "Y":
-                row_dict["row_index"] = row_index
+            published_status = row_dict.get("Published? Y/N", "").strip().upper()
+            post_type = row_dict.get("Type", "").strip()
+            print(f"Row {row_index}: Published status: {published_status}, Type: {post_type}")  # Debug print
+            if published_status != "Y":
+                row_dict['row_index'] = row_index
+                print(f"Returning post data: {row_dict}")  # Debug print
                 return row_dict
 
         print("No unpublished posts found.")
@@ -65,9 +71,11 @@ class FbPostTracker:
         else:
             print(f"Failed to add post to published log: {post_id}")
 
-    def update_post_status(self, row_index: int, status: str) -> None:
-        range_name = f"'to publish'!L{row_index}"
-        values = [[status]]
+    def update_post_status(self, row_index: int, status: str, post_id: str = "", media_ids: str = "") -> None:
+        """Update the status of a post in the spreadsheet."""
+        range_name = f"'to publish'!L{row_index}:P{row_index}"
+        current_datetime = self.handler.get_current_datetime()
+        values = [[status, current_datetime, post_id, media_ids, ""]]  # Last empty string for "Post link" column
         self.handler.update_spreadsheet(self.spreadsheet_id, range_name, values)
         print(f"Updated post status to: {status}")
 
@@ -80,4 +88,4 @@ class FbPostTracker:
                 if 'media' in attachment:
                     media_ids.append(attachment['media'].get('id', ''))
         
-        return ",".join(f"'{id}" for id in media_ids)
+        return ",".join(media_ids)
