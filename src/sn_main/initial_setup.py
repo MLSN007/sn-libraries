@@ -65,4 +65,5 @@ def setup_credentials(account_id):
 if __name__ == "__main__":
     # setup_credentials("JK")
     # setup_credentials("007")
-    setup_credentials("NOCA")
+    # setup_credentials("NOCA")
+    setup_credentials("M4D")
