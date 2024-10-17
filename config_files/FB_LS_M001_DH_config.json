@@ -1,0 +1,8 @@
+{
+    "user_id": "FB_LS_User_id",
+    "app_id": "FB_M001_App_id",
+    "app_secret": "FB_M001_App_secret",
+    "access_token": "FB_M001_DH_App_token",
+    "page_id": "FB_DH_Pg_id",
+    "user_token": "FB_M001_user_token"
+}
