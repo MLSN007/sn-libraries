@@ -16,19 +16,19 @@ def main():
     setup_logging()
 
     # Load configuration for FB user+page --------------COMMENT OUT THE RIGHT FB USER_APP_PG ---------------
-    config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_LS_M001_ES_config.json"
+    # config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_LS_M001_ES_config.json"
     config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_JK_JK Travel_JK Travel_config.json"
 
     config_loader = FbConfigLoader(config_file)
 
     # Set up Google Sheets configuration -----------COMMENT OUT THE RIGHT GOOGLE USER -------------
     # JK
-    # account_id = "JK"  # the account id for Google Sheets
-    # spreadsheet_id = "1wrvG3wmptA76kywbVe1gy5as-ALDzmebLvqoxWIw9mw"
+    account_id = "JK"  # the account id for Google Sheets
+    spreadsheet_id = "1wrvG3wmptA76kywbVe1gy5as-ALDzmebLvqoxWIw9mw"
 
     # NOCA
-    account_id = "NOCA"
-    spreadsheet_id = "1gNaLWtTnQzuUyRnwp1RGcoXoOeLiapef4oKEof3WUek"
+    # account_id = "NOCA"
+    # spreadsheet_id = "1gNaLWtTnQzuUyRnwp1RGcoXoOeLiapef4oKEof3WUek"
 
     print(
         f"Google Sheets configuration - Account ID: {account_id}, Spreadsheet ID: {spreadsheet_id}"
