@@ -36,4 +36,4 @@ def create_fb_config(user_name, app_name, page_name):
 
 
 if __name__ == "__main__":
-    create_fb_config(user_name="LS ?????????????", app_name="XXXXX", page_name="DH")
+    create_fb_config(user_name="LS", app_name="XXXXX", page_name="DH")
