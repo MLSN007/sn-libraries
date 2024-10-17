@@ -10,6 +10,14 @@ client_secrets_007.json
 config_account_007.json
 client_account_key_JK.json
 client_account_key_007.json
+
+# FB
+# JK accounts
 FB_JK_JK Travel_JK Travel_config.json
-FB_LS_ES_ES_config.json
+
+# LS accounts M001 App
 FB_LS_M001_DH_config.json
+FB_LS_M001_ES_config.json
+
+# LS accounts ES App
+FB_LS_ES_ES_config.json
