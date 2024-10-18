@@ -15,30 +15,21 @@ logger = logging.getLogger(__name__)
 def main():
     setup_logging()
 
-    # Load configuration for FB user+page --------------COMMENT OUT THE RIGHT FB USER_APP_PG ---------------
-    # config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_LS_M001_ES_config.json"
+    # Load configuration for FB user+page
     config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_JK_JK Travel_JK Travel_config.json"
-
     config_loader = FbConfigLoader(config_file)
+    logger.info("Facebook configuration and credentials loaded successfully")
 
-    # Set up Google Sheets configuration -----------COMMENT OUT THE RIGHT GOOGLE USER -------------
-    # JK
-    account_id = "JK"  # the account id for Google Sheets
+    # Set up Google Sheets configuration
+    account_id = "JK"
     spreadsheet_id = "1wrvG3wmptA76kywbVe1gy5as-ALDzmebLvqoxWIw9mw"
-
-    # NOCA
-    # account_id = "NOCA"
-    # spreadsheet_id = "1gNaLWtTnQzuUyRnwp1RGcoXoOeLiapef4oKEof3WUek"
-
-    print(
+    logger.info(
         f"Google Sheets configuration - Account ID: {account_id}, Spreadsheet ID: {spreadsheet_id}"
     )
 
-    # -------------------------------------------------------------------------
-
     # Define the source path for media files
     source_path = r"C:\Users\manue\Downloads\tests"
-    print(f"Source path for media files: {source_path}")
+    logger.info(f"Source path for media files: {source_path}")
 
     # Initialize components
     api_client = FbApiClient(config_loader.credentials)
@@ -57,8 +48,11 @@ def main():
 
     try:
         # Publish next post
-        orchestrator.publish_next_post()
-
+        result = orchestrator.publish_next_post()
+        if result:
+            logger.info(f"Post published successfully. Result: {result}")
+        else:
+            logger.warning("No post was available to publish.")
     except Exception as e:
         logger.error(f"An error occurred: {str(e)}", exc_info=True)
 

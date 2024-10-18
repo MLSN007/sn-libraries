@@ -36,6 +36,9 @@ import traceback
 import random
 from fb_api_client import FbApiClient
 from fb_post_composer import FbPostComposer
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class FbPostManager:
@@ -165,11 +168,16 @@ class FbPostManager:
             if location:
                 post_data["place"] = location
             post = self.api_client.put_object(page_id, "feed", **post_data)
-            print(f"Text post published successfully. Post ID: {post.get('id')}")
-            return post
+            post_id = post.get("id")
+            
+            # Fetch the post details to get the permalink_url
+            post_details = self.api_client.get_object(post_id, fields="permalink_url")
+            post_url = post_details.get('permalink_url', f"https://www.facebook.com/{post_id}")
+            
+            logger.info(f"Text post published successfully. Post ID: {post_id}, URL: {post_url}")
+            return {"id": post_id, "link": post_url, "media_links": ""}
         except Exception as e:
-            print(f"Error publishing text post: {e}")
-            traceback.print_exc()
+            logger.error(f"Error publishing text post: {e}")
             return None
 
     def publish_photo_post(
@@ -180,7 +188,6 @@ class FbPostManager:
         location: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         try:
-            # Check if the file exists
             if not os.path.exists(photo_path):
                 raise FileNotFoundError(f"Photo file not found: {photo_path}")
 
@@ -191,48 +198,18 @@ class FbPostManager:
                 post = self.api_client.put_photo(
                     image=image_file, album_path=f"{page_id}/photos", **post_data
                 )
-            print(
-                f"Post with photo published successfully. Post ID: {post.get('post_id') or post.get('id')}"
-            )
-            post["media_ids"] = [post.get("id")]
-            return post
-        except FileNotFoundError as e:
-            print(f"Error publishing post with photo: {str(e)}")
-            return None
-        except requests.RequestException as e:
-            print(f"Error publishing post with photo: {str(e)}")
-            if hasattr(e, "response") and e.response is not None:
-                print(f"Response content: {e.response.content}")
-            return None
+            post_id = post.get("post_id") or post.get("id")
+            
+            # Fetch the post details to get the permalink_url
+            post_details = self.api_client.get_object(post_id, fields="permalink_url")
+            post_url = post_details.get('permalink_url', f"https://www.facebook.com/{post_id}")
+            
+            media_link = post.get("link", "")
+            logger.info(f"Post with photo published successfully. Post ID: {post_id}, URL: {post_url}")
+            return {"id": post_id, "link": post_url, "media_links": media_link}
         except Exception as e:
-            print(f"Unexpected error publishing post with photo: {str(e)}")
-            import traceback
-
-            traceback.print_exc()
+            logger.error(f"Error publishing post with photo: {str(e)}")
             return None
-
-    def _format_post_result(self, post: Dict[str, Any]) -> str:
-        """Formats the post result into a friendly string."""
-        formatted_result = "Post Details:\n"
-        formatted_result += f"  Post ID: {post.get('id', 'N/A')}\n"
-        formatted_result += (
-            f"  Post URL: https://www.facebook.com/{post.get('id', '')}\n"
-        )
-
-        if "message" in post:
-            formatted_result += f"  Message: {post['message']}\n"
-
-        if "created_time" in post:
-            formatted_result += f"  Created at: {post['created_time']}\n"
-
-        if "attachments" in post:
-            formatted_result += "  Attachments:\n"
-            for attachment in post["attachments"].get("data", []):
-                formatted_result += f"    - Type: {attachment.get('type', 'N/A')}\n"
-                if "media" in attachment:
-                    formatted_result += f"      URL: {attachment['media'].get('image', {}).get('src', 'N/A')}\n"
-
-        return formatted_result
 
     def publish_multi_photo_post(
         self,
@@ -244,75 +221,59 @@ class FbPostManager:
         max_retries: int = 3,
     ) -> Optional[Dict]:
         try:
-            print(f"Attempting to publish multi-photo post to page_id: {page_id}")
-            print(f"Message: {message}")
-            print(f"Photo paths: {photo_paths}")
-            print(f"Media titles: {media_titles}")
-
+            logger.info(f"Attempting to publish multi-photo post to page_id: {page_id}")
             photo_ids = []
-            media_ids = []
-            default_title = media_titles[0] if media_titles else "No title"
+            media_links = []
 
             for i, photo_path in enumerate(photo_paths):
                 retries = 0
                 while retries < max_retries:
                     try:
-                        print(f"Uploading photo: {photo_path} (Attempt {retries + 1})")
-                        media_title = (
-                            media_titles[i] if i < len(media_titles) else default_title
+                        logger.info(
+                            f"Uploading photo: {photo_path} (Attempt {retries + 1})"
                         )
-                        print(f"Photo title: {media_title}")
+                        media_title = media_titles[i] if i < len(media_titles) else ""
                         with open(photo_path, "rb") as photo_file:
                             photo = self.api_client.put_photo(
                                 image=photo_file,
-                                message=media_title,  # Use the media title as the photo caption
+                                message=media_title,
                                 album_path=f"{page_id}/photos",
                                 published=False,
                             )
-                        print(f"Photo upload response: {photo}")
                         photo_ids.append({"media_fbid": photo["id"]})
-                        media_ids.append(photo["id"])
-                        break  # Successfully uploaded, break the retry loop
+                        media_links.append(photo.get("link", ""))
+                        break
                     except Exception as e:
-                        print(f"Error uploading photo: {e}")
+                        logger.error(f"Error uploading photo: {e}")
                         retries += 1
-                        if retries < max_retries:
-                            wait_time = random.uniform(
-                                1, 5
-                            )  # Random wait between 1 and 5 seconds
-                            print(f"Retrying in {wait_time:.2f} seconds...")
-                            time.sleep(wait_time)
-                        else:
-                            print(
-                                f"Failed to upload photo after {max_retries} attempts"
-                            )
+                        if retries >= max_retries:
                             raise
 
-                # Add a delay between photo uploads
                 time.sleep(2)
 
             if not photo_ids:
                 raise ValueError("No photos were successfully uploaded")
 
-            print(f"All photos uploaded. Photo IDs: {photo_ids}")
-
             post_data = {"message": message, "attached_media": json.dumps(photo_ids)}
             if location:
                 post_data["place"] = location
-            print(f"Creating post with data: {post_data}")
 
             post = self.api_client.put_object(page_id, "feed", **post_data)
-            print(f"Post creation response: {post}")
-
-            # Add media_ids to the post result
-            post["media_ids"] = media_ids
-
-            print(f"Multi-photo post published successfully. Post ID: {post.get('id')}")
-            return post
+            post_id = post.get("id")
+            
+            # Fetch the post details to get the permalink_url
+            post_details = self.api_client.get_object(post_id, fields="permalink_url")
+            post_url = post_details.get('permalink_url', f"https://www.facebook.com/{post_id}")
+            
+            logger.info(f"Multi-photo post published successfully. Post ID: {post_id}, URL: {post_url}")
+            return {
+                "id": post_id,
+                "link": post_url,
+                "media_links": ",".join(media_links),
+                "media_ids": [photo["media_fbid"] for photo in photo_ids]
+            }
         except Exception as e:
-            print(f"Error publishing multi-photo post: {e}")
-            print("Traceback:")
-            traceback.print_exc()
+            logger.error(f"Error publishing multi-photo post: {e}")
             return None
 
     def publish_video_post(
@@ -336,16 +297,18 @@ class FbPostManager:
                 post = self.api_client.put_object(
                     page_id, "videos", data=video_data, files=files
                 )
-            print(f"Video post published successfully. Post ID: {post.get('id')}")
-            post["media_ids"] = [post.get("id")]
-            return post
-        except requests.RequestException as e:
-            print(f"Error publishing video post: {e}")
-            if hasattr(e, "response") and e.response is not None:
-                print(f"Response content: {e.response.content}")
-            return None
+            post_id = post.get('id')
+            post_link = f"https://www.facebook.com/{post_id}"
+            media_link = post.get('source', '')
+            logger.info(f"Video post published successfully. Post ID: {post_id}")
+            return {
+                "id": post_id,
+                "link": post_link,
+                "media_links": media_link,
+                "media_ids": [post_id]
+            }
         except Exception as e:
-            print(f"Unexpected error publishing video post: {e}")
+            logger.error(f"Error publishing video post: {e}")
             return None
 
     def publish_reel(
@@ -355,37 +318,33 @@ class FbPostManager:
         video_path: str,
         title: Optional[str] = None,
         location: Optional[str] = None,
-        is_reel: bool = True,
     ) -> Optional[Dict]:
         try:
             with open(video_path, "rb") as video_file:
                 video_data = {
                     "description": message,
-                    "title": title if title else "Uploaded video",
+                    "title": title if title else "Uploaded reel",
+                    "is_reel": "true"
                 }
-                if is_reel:
-                    video_data["is_reel"] = "true"
                 if location:
                     video_data["place"] = location
                 files = {"source": video_file}
 
-                reel = self.api_client.put_object(
+                post = self.api_client.put_object(
                     page_id, "videos", data=video_data, files=files
                 )
-            print(
-                f"Video {'reel' if is_reel else 'post'} published successfully. Post ID: {reel.get('id')}"
-            )
-            reel["media_ids"] = [reel.get("id")]
-            return reel
-        except requests.RequestException as e:
-            print(f"Error publishing video {'reel' if is_reel else 'post'}: {e}")
-            if hasattr(e, "response") and e.response is not None:
-                print(f"Response content: {e.response.content}")
-            return None
+            post_id = post.get('id')
+            post_link = f"https://www.facebook.com/{post_id}"
+            media_link = post.get('source', '')
+            logger.info(f"Reel published successfully. Post ID: {post_id}")
+            return {
+                "id": post_id,
+                "link": post_link,
+                "media_links": media_link,
+                "media_ids": [post_id]
+            }
         except Exception as e:
-            print(
-                f"Unexpected error publishing video {'reel' if is_reel else 'post'}: {e}"
-            )
+            logger.error(f"Error publishing reel: {e}")
             return None
 
     def _format_reel_result(self, reel: Dict[str, Any]) -> str:
@@ -479,11 +438,12 @@ class FbPostManager:
             if not post_type:
                 raise ValueError("Post type is empty")
 
+            result = None
             if post_type == "text":
-                return self.publish_text_post(page_id, message, location)
+                result = self.publish_text_post(page_id, message, location)
             elif post_type == "single photo":
                 if media_paths:
-                    return self.publish_photo_post(
+                    result = self.publish_photo_post(
                         page_id, message, media_paths[0], location
                     )
                 else:
@@ -491,13 +451,13 @@ class FbPostManager:
                         f"No media path provided for single photo post. Post data: {post_data}"
                     )
             elif post_type == "multiple photo":
-                return self.publish_multi_photo_post(
+                result = self.publish_multi_photo_post(
                     page_id, message, media_paths, media_titles, location
                 )
             elif post_type == "video":
                 if media_paths:
                     title = media_titles[0] if media_titles else None
-                    return self.publish_video_post(
+                    result = self.publish_video_post(
                         page_id, message, media_paths[0], title, location
                     )
                 else:
@@ -505,14 +465,21 @@ class FbPostManager:
             elif post_type == "reel":
                 if media_paths:
                     title = media_titles[0] if media_titles else None
-                    return self.publish_reel(
+                    result = self.publish_reel(
                         page_id, message, media_paths[0], title, location
                     )
                 else:
                     raise ValueError("No media path provided for reel post")
             else:
                 raise ValueError(f"Unknown post type: {post_type}")
+
+            if result:
+                logger.info(f"Post published successfully. Type: {post_type}, ID: {result.get('id')}, URL: {result.get('link')}")
+            return result
         except Exception as e:
-            print(f"Error publishing post: {str(e)}")
+            logger.error(f"Error publishing post: {str(e)}")
             traceback.print_exc()
             return None
+
+
+
