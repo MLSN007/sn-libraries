@@ -92,9 +92,9 @@ class FbApiClient:
         endpoint = f"{object_id}/{connection_name}"
         return self.make_request(endpoint, params=kwargs)
 
-    def put_object(self, parent_object: str, connection_name: str, **data):
+    def put_object(self, parent_object: str, connection_name: str, data: Any = None, headers: Optional[Dict[str, str]] = None):
         endpoint = f"{parent_object}/{connection_name}"
-        return self.make_request(endpoint, method="POST", data=data)
+        return self.make_request(endpoint, method="POST", data=data, headers=headers)
 
     def put_photo(self, image, message=None, album_path="me/photos", **kwargs):
         files = {"source": image}
@@ -104,3 +104,4 @@ class FbApiClient:
         return self.make_request(album_path, method="POST", files=files, data=data)
 
     # Add more methods as needed
+
