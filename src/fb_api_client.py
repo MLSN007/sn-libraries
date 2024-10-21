@@ -18,8 +18,10 @@ Attributes:
 import os
 from typing import Dict, Optional, Any
 import requests
-import traceback
 from requests.exceptions import RequestException
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class FbApiClient:
@@ -57,19 +59,23 @@ class FbApiClient:
         data: Optional[Dict] = None,
         files: Optional[Dict] = None,
     ) -> Dict[str, Any]:
-        url = f"{self.base_url}{endpoint}"
-        params = params or {}
-        if "access_token" not in params:
-            params["access_token"] = self.credentials["access_token"]
-
+        url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"  # Fix URL construction
+        headers = {"Authorization": f"Bearer {self.credentials['access_token']}"}
+        
         try:
-            response = requests.request(method, url, params=params, data=data, files=files)
+            if method == "GET":
+                response = requests.get(url, headers=headers, params=params)
+            elif method == "POST":
+                response = requests.post(url, headers=headers, data=data, files=files)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+
             response.raise_for_status()
             return response.json()
         except RequestException as e:
-            print(f"Error making request to {url}: {str(e)}")
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"Response content: {e.response.content}")
+            logger.error(f"Error making request to {url}: {e}")
+            if e.response is not None:
+                logger.error(f"Response content: {e.response.content}")
             raise
 
     def get_object(

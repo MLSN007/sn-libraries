@@ -7,12 +7,17 @@ from fb_publishing_orchestrator import FbPublishingOrchestrator
 from error_handler import setup_logging, handle_error
 from google_sheets_handler import GoogleSheetsHandler
 import logging
+from tenacity import retry, stop_after_attempt, wait_exponential
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
 
 @handle_error
-def main():
+def main() -> None:
+    """
+    Main function to orchestrate the publishing of Facebook posts and tracking via Google Sheets.
+    """
     setup_logging()
 
     # -------------------------------------------------------------------------
@@ -37,8 +42,14 @@ def main():
 
     # Initialize components
     api_client = FbApiClient(config_loader.credentials)
-    sheets_handler = GoogleSheetsHandler(account_id=account_id)
-    sheets_handler.authenticate()
+    sheets_handler = GoogleSheetsHandler(
+        account_id=account_id, use_oauth=False  # Set use_oauth to False for development mode
+    )
+    try:
+        sheets_handler.authenticate()
+    except ValueError as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return
     post_tracker = FbPostTracker(account_id, spreadsheet_id)
     post_composer = FbPostComposer(source_path)
     post_manager = FbPostManager(api_client, post_composer)
@@ -63,3 +74,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

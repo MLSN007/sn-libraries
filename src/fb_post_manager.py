@@ -37,6 +37,18 @@ import random
 from fb_api_client import FbApiClient
 from fb_post_composer import FbPostComposer
 import logging
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
+from requests.exceptions import RequestException
+from requests_toolbelt import MultipartEncoder
+
+from facebook_business.api import FacebookAdsApi
+from facebook_business.adobjects.adaccount import AdAccount
+from facebook_business.adobjects.advideo import AdVideo
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +181,16 @@ class FbPostManager:
                 post_data["place"] = location
             post = self.api_client.put_object(page_id, "feed", **post_data)
             post_id = post.get("id")
-            
+
             # Fetch the post details to get the permalink_url
             post_details = self.api_client.get_object(post_id, fields="permalink_url")
-            post_url = post_details.get('permalink_url', f"https://www.facebook.com/{post_id}")
-            
-            logger.info(f"Text post published successfully. Post ID: {post_id}, URL: {post_url}")
+            post_url = post_details.get(
+                "permalink_url", f"https://www.facebook.com/{post_id}"
+            )
+
+            logger.info(
+                f"Text post published successfully. Post ID: {post_id}, URL: {post_url}"
+            )
             return {"id": post_id, "link": post_url, "media_links": ""}
         except Exception as e:
             logger.error(f"Error publishing text post: {e}")
@@ -199,13 +215,17 @@ class FbPostManager:
                     image=image_file, album_path=f"{page_id}/photos", **post_data
                 )
             post_id = post.get("post_id") or post.get("id")
-            
+
             # Fetch the post details to get the permalink_url
             post_details = self.api_client.get_object(post_id, fields="permalink_url")
-            post_url = post_details.get('permalink_url', f"https://www.facebook.com/{post_id}")
-            
+            post_url = post_details.get(
+                "permalink_url", f"https://www.facebook.com/{post_id}"
+            )
+
             media_link = post.get("link", "")
-            logger.info(f"Post with photo published successfully. Post ID: {post_id}, URL: {post_url}")
+            logger.info(
+                f"Post with photo published successfully. Post ID: {post_id}, URL: {post_url}"
+            )
             return {"id": post_id, "link": post_url, "media_links": media_link}
         except Exception as e:
             logger.error(f"Error publishing post with photo: {str(e)}")
@@ -260,17 +280,21 @@ class FbPostManager:
 
             post = self.api_client.put_object(page_id, "feed", **post_data)
             post_id = post.get("id")
-            
+
             # Fetch the post details to get the permalink_url
             post_details = self.api_client.get_object(post_id, fields="permalink_url")
-            post_url = post_details.get('permalink_url', f"https://www.facebook.com/{post_id}")
-            
-            logger.info(f"Multi-photo post published successfully. Post ID: {post_id}, URL: {post_url}")
+            post_url = post_details.get(
+                "permalink_url", f"https://www.facebook.com/{post_id}"
+            )
+
+            logger.info(
+                f"Multi-photo post published successfully. Post ID: {post_id}, URL: {post_url}"
+            )
             return {
                 "id": post_id,
                 "link": post_url,
                 "media_links": ",".join(media_links),
-                "media_ids": [photo["media_fbid"] for photo in photo_ids]
+                "media_ids": [photo["media_fbid"] for photo in photo_ids],
             }
         except Exception as e:
             logger.error(f"Error publishing multi-photo post: {e}")
@@ -297,20 +321,25 @@ class FbPostManager:
                 post = self.api_client.put_object(
                     page_id, "videos", data=video_data, files=files
                 )
-            post_id = post.get('id')
+            post_id = post.get("id")
             post_link = f"https://www.facebook.com/{post_id}"
-            media_link = post.get('source', '')
+            media_link = post.get("source", "")
             logger.info(f"Video post published successfully. Post ID: {post_id}")
             return {
                 "id": post_id,
                 "link": post_link,
                 "media_links": media_link,
-                "media_ids": [post_id]
+                "media_ids": [post_id],
             }
         except Exception as e:
             logger.error(f"Error publishing video post: {e}")
             return None
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(RequestException),
+    )
     def publish_reel(
         self,
         page_id: str,
@@ -318,34 +347,88 @@ class FbPostManager:
         video_path: str,
         title: Optional[str] = None,
         location: Optional[str] = None,
-    ) -> Optional[Dict]:
+    ) -> Optional[Dict[str, Any]]:
         try:
-            with open(video_path, "rb") as video_file:
+            if not os.path.exists(video_path):
+                raise FileNotFoundError(f"Video file not found: {video_path}")
+
+            file_size = os.path.getsize(video_path)
+            logger.info(
+                f"Attempting to upload reel. File size: {file_size / (1024 * 1024):.2f} MB"
+            )
+
+            # Start chunked upload
+            with open(video_path, 'rb') as video_file:
+                chunk_size = 4 * 1024 * 1024  # 4MB chunks
+                upload_session = self.api_client.put_object(
+                    page_id,
+                    "videos",
+                    data={
+                        "upload_phase": "start",
+                        "file_size": file_size
+                    }
+                )
+                upload_session_id = upload_session['upload_session_id']
+
+                # Upload chunks
+                offset = 0
+                while offset < file_size:
+                    chunk = video_file.read(chunk_size)
+                    if not chunk:
+                        break
+
+                    m = MultipartEncoder(
+                        fields={
+                            'upload_phase': 'transfer',
+                            'upload_session_id': upload_session_id,
+                            'start_offset': str(offset),
+                            'video_file_chunk': ('chunk', chunk, 'application/octet-stream')
+                        }
+                    )
+
+                    self.api_client.put_object(
+                        page_id,
+                        "videos",
+                        data=m,
+                        headers={'Content-Type': m.content_type}
+                    )
+
+                    offset += len(chunk)
+
+                # Finish upload
                 video_data = {
-                    "description": message,
+                    "upload_phase": "finish",
+                    "upload_session_id": upload_session_id,
                     "title": title if title else "Uploaded reel",
-                    "is_reel": "true"
+                    "description": message,
+                    "is_reel": "true",
                 }
                 if location:
                     video_data["place"] = location
-                files = {"source": video_file}
 
-                post = self.api_client.put_object(
-                    page_id, "videos", data=video_data, files=files
-                )
-            post_id = post.get('id')
-            post_link = f"https://www.facebook.com/{post_id}"
-            media_link = post.get('source', '')
-            logger.info(f"Reel published successfully. Post ID: {post_id}")
+                post = self.api_client.put_object(page_id, "videos", data=video_data)
+
+            post_id = post.get("id")
+            post_url = f"https://www.facebook.com/{post_id}"
+            media_link = post.get("source", "")
+            logger.info(
+                f"Reel published successfully. Post ID: {post_id}, URL: {post_url}"
+            )
             return {
                 "id": post_id,
-                "link": post_link,
+                "link": post_url,
                 "media_links": media_link,
-                "media_ids": [post_id]
+                "media_ids": [post_id],
             }
-        except Exception as e:
+        except RequestException as e:
             logger.error(f"Error publishing reel: {e}")
-            return None
+            logger.error(
+                f"Response content: {e.response.content if e.response else 'No response content'}"
+            )
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error publishing reel: {e}")
+            raise
 
     def _format_reel_result(self, reel: Dict[str, Any]) -> str:
         """Formats the reel result into a friendly string."""
@@ -474,12 +557,12 @@ class FbPostManager:
                 raise ValueError(f"Unknown post type: {post_type}")
 
             if result:
-                logger.info(f"Post published successfully. Type: {post_type}, ID: {result.get('id')}, URL: {result.get('link')}")
+                logger.info(
+                    f"Post published successfully. Type: {post_type}, ID: {result.get('id')}, URL: {result.get('link')}"
+                )
             return result
         except Exception as e:
             logger.error(f"Error publishing post: {str(e)}")
             traceback.print_exc()
             return None
-
-
 

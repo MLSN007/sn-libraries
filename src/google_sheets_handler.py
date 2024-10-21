@@ -8,8 +8,14 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.oauth2 import service_account
 from datetime import datetime
+import logging
+from google.auth.exceptions import RefreshError
+from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
+@dataclass
 class GoogleSheetsHandler:
     """
     Handles interactions with Google Sheets and Drive APIs for multiple accounts.
@@ -21,6 +27,9 @@ class GoogleSheetsHandler:
     Usage:
     - For development: handler = GoogleSheetsHandler('account1')
     - For production: handler = GoogleSheetsHandler('account1', use_oauth=True)
+
+    Note: To create the initial config_account_XX.json file, use the initial_setup.py script.
+    This script will guide you through the OAuth flow and create the necessary configuration file.
     """
 
     SCOPES = [
@@ -36,7 +45,6 @@ class GoogleSheetsHandler:
             account_id (str): Identifier for the Google account to use.
             use_oauth (bool): If True, use OAuth flow instead of config file.
         """
-
 
         self.account_id = account_id
         self.use_oauth = use_oauth
@@ -65,7 +73,7 @@ class GoogleSheetsHandler:
 
         The method also refreshes expired tokens and saves new tokens in development mode.
         """
-        if not self.use_oauth and os.path.exists(self.config_path):
+        if not self.use_oauth and self.config_path and os.path.exists(self.config_path):
             with open(self.config_path, "r") as f:
                 config = json.load(f)
             if "token" in config:
@@ -81,17 +89,20 @@ class GoogleSheetsHandler:
         if not self.creds or not self.creds.valid:
             if self.creds and self.creds.expired and self.creds.refresh_token:
                 self.creds.refresh(Request())
-            else:
+            elif self.use_oauth:
                 client_secrets_file = os.getenv(f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}")
                 if not client_secrets_file:
                     raise ValueError(f"Client secrets file path not set for {self.account_id}")
                 flow = Flow.from_client_secrets_file(client_secrets_file, self.SCOPES)
-                self.creds = flow.run_local_server(port=0)
+                flow.run_local_server(port=0)
+                self.creds = flow.credentials
+            else:
+                raise ValueError("No valid credentials available. Please set up the config file or use OAuth.")
 
-            if not self.use_oauth and self.config_path:
-                with open(self.config_path, "w") as f:
-                    token_data = self.creds.to_json()
-                    json.dump({"token": token_data}, f)
+        if not self.use_oauth and self.config_path:
+            with open(self.config_path, "w") as f:
+                token_data = self.creds.to_json()
+                json.dump({"token": token_data}, f)
 
         self.sheets_service = build("sheets", "v4", credentials=self.creds)
         self.drive_service = build("drive", "v3", credentials=self.creds)
