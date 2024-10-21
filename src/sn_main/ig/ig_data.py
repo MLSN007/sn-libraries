@@ -9,8 +9,9 @@ from instagrapi.types import (
     StoryLocation,
     StorySticker,
     UserShort,
-    HttpUrl
+    HttpUrl,
 )
+
 
 @dataclass
 class IgPostData:
@@ -31,10 +32,11 @@ class IgPostData:
         album_media_ids (List[str], optional): List of media IDs in the album (if it's an album).
         album_media_urls (List[str], optional): List of media URLs in the album (if it's an album).
     """
+
     media_id: str
     media_type: int
     product_type: Optional[str]
-    caption: str                        # complete with hashtags and mentions
+    caption: str  # complete with hashtags and mentions
     timestamp: datetime
     media_url: Optional[str] = None  # Might not be relevant for albums
     location_pk: Optional[int] = None
@@ -44,6 +46,7 @@ class IgPostData:
     is_album: bool = False
     album_media_ids: Optional[List[str]] = None  # List of media IDs in the album
     album_media_urls: Optional[List[str]] = None  # List of media URLs in the album
+
 
 @dataclass
 class IgStData:
@@ -76,11 +79,38 @@ class IgStData:
     hashtags: Optional[List[str]] = field(default_factory=list)
     link: Optional[str] = None
 
-
     # Additional fields you might want to add
     # e.g., is_paid_partnership: bool = False
     #       imported_taken_at: Optional[datetime] = None
 
 
+@dataclass
+class IgCommentData:
+    """
+    Represents an Instagram comment with detailed information.
 
-# Add other relevant attributes as needed (avoid complex objects)
+    Attributes:
+        comment_id (int): The unique identifier of the comment.
+        post_id (int): The ID of the post the comment belongs to.
+        user_id (int): The ID of the user who made the comment.
+        comment_text (str): The text content of the comment.
+        timestamp (datetime): The date and time the comment was created.
+        reply_to_comment_id (Optional[int]): The ID of the parent comment
+                                            (if it's a reply).
+        status (str): The status of the comment ('active', 'deleted', 'replied').
+        user_name (Optional[str]): The username of the commenter.
+        user_full_name (Optional[str]): The full name of the commenter.
+        is_business_account (Optional[bool]): Whether the commenter is a
+                                             business account.
+    """
+
+    comment_id: int
+    post_id: int
+    user_id: int
+    comment_text: str
+    timestamp: datetime
+    reply_to_comment_id: Optional[int] = None
+    status: str = "active"
+    user_name: Optional[str] = None
+    user_full_name: Optional[str] = None
+    is_business_account: Optional[bool] = None

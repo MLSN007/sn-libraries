@@ -27,8 +27,8 @@ from instagrapi.exceptions import (
     ClientJSONDecodeError,
     ClientConnectionError,
     ClientNotFoundError,
-    UserNotFound
-    )
+    UserNotFound,
+)
 from ig_data import IgPostData
 
 
@@ -48,7 +48,6 @@ class IgUtils:
     Args:
         client (instagrapi.Client): An authenticated Instagrapi client.
     """
-
 
     MAX_RETRIES = 3
     RETRY_DELAY = 5
@@ -71,14 +70,21 @@ class IgUtils:
         while retries < max_retries:
             try:
                 return self.client.client.location_info(pk)  # Access underlying client
-            except (ClientError, ClientJSONDecodeError, ClientConnectionError, ClientNotFoundError) as e:
+            except (
+                ClientError,
+                ClientJSONDecodeError,
+                ClientConnectionError,
+                ClientNotFoundError,
+            ) as e:
                 if isinstance(e, ClientNotFoundError):
                     return None  # Location not found
 
                 retries += 1
                 delay = random.uniform(3, 8)  # Increased random delay
                 time.sleep(delay)
-                logger.warning(f"Retrying location fetch (attempt {retries}/{max_retries}) after {delay:.2f}s due to: {e}")
+                logger.warning(
+                    f"Retrying location fetch (attempt {retries}/{max_retries}) after {delay:.2f}s due to: {e}"
+                )
         logger.error(f"Failed to fetch location after {max_retries} retries.")
         return None
 
@@ -102,12 +108,15 @@ class IgUtils:
                 retries += 1
                 delay = random.uniform(3, 8)  # Increased random delay
                 time.sleep(delay)
-                logging.warning(f"Retrying location search (attempt {retries}/{max_retries}) after {delay:.2f}s due to: {e}")
+                logging.warning(
+                    f"Retrying location search (attempt {retries}/{max_retries}) after {delay:.2f}s due to: {e}"
+                )
         logger.error(f"Failed to search locations after {max_retries} retries.")
         return []
 
-
-    def get_top_locations_by_name(self, name: str, limit: int = 10, max_retries: int = 3) -> list[Location]:
+    def get_top_locations_by_name(
+        self, name: str, limit: int = 10, max_retries: int = 3
+    ) -> list[Location]:
         """Gets the top matching locations for a query with a specified limit.
 
         Args:
@@ -120,7 +129,6 @@ class IgUtils:
         """
         locations = self.get_locations_by_name(name, max_retries)
         return locations[:limit]
-
 
     def location_to_dict(self, location: Location) -> dict:
         """Converts a Location object to a dictionary."""
@@ -139,7 +147,6 @@ class IgUtils:
             "website": location.website,
         }
 
-
     def music_search(self, query: str) -> List[Track]:
         """Searches for music tracks on Instagram based on a query."""
         try:
@@ -148,11 +155,9 @@ class IgUtils:
             logger.error(f"Error searching for music: {e}")
             raise  # Re-raise the exception after logging
 
-
     def music_by_author(self, author: str) -> List[Track]:
         """Finds music tracks by a specific author on Instagram."""
         return self.client.search_music(author)
-
 
     def get_track_by_id(self, track_pk: str) -> Track | None:
         """Gets a Track object by its ID (pk)."""
@@ -161,8 +166,6 @@ class IgUtils:
         except ClientError as e:
             logger.error(f"Error fetching track with ID {track_pk}: {e}")
             return None
-
-
 
     def get_user_id_from_username(self, username: str) -> Optional[int]:
         """
@@ -188,6 +191,7 @@ class IgUtils:
             logger.error(f"An error occurred: {e}")
             return None
 
+
 # ......................................
 # ADITIONAL METHODS
 # ......................................
@@ -197,7 +201,6 @@ def create_post_dataframe(posts: List[IgPostData]) -> pd.DataFrame:
     """Creates a Pandas DataFrame from a list of IgPostData objects."""
     # Placeholder for future implementation
     pass
-
 
 
 def save_post_dataframe(df: pd.DataFrame, filename: str = "ig_posts.csv") -> None:
