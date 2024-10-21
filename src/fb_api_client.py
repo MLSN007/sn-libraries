@@ -58,15 +58,18 @@ class FbApiClient:
         params: Optional[Dict] = None,
         data: Optional[Dict] = None,
         files: Optional[Dict] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
-        url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"  # Fix URL construction
-        headers = {"Authorization": f"Bearer {self.credentials['access_token']}"}
+        url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+        default_headers = {"Authorization": f"Bearer {self.credentials['access_token']}"}
+        if headers:
+            default_headers.update(headers)
         
         try:
             if method == "GET":
-                response = requests.get(url, headers=headers, params=params)
+                response = requests.get(url, headers=default_headers, params=params)
             elif method == "POST":
-                response = requests.post(url, headers=headers, data=data, files=files)
+                response = requests.post(url, headers=default_headers, data=data, files=files)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
@@ -94,7 +97,12 @@ class FbApiClient:
 
     def put_object(self, parent_object: str, connection_name: str, data: Any = None, headers: Optional[Dict[str, str]] = None):
         endpoint = f"{parent_object}/{connection_name}"
-        return self.make_request(endpoint, method="POST", data=data, headers=headers)
+        response = self.make_request(endpoint, method="POST", data=data, headers=headers)
+        if isinstance(response, dict):
+            return response
+        else:
+            logger.warning(f"Unexpected response type from API: {type(response)}")
+            return {"response": response}
 
     def put_photo(self, image, message=None, album_path="me/photos", **kwargs):
         files = {"source": image}

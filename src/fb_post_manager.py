@@ -352,7 +352,9 @@ class FbPostManager:
         if is_reel:
             finish_data["is_reel"] = "true"
 
-        return self.api_client.put_object(page_id, "videos", data=finish_data)
+        response = self.api_client.put_object(page_id, "videos", data=finish_data)
+        logger.info(f"Chunked upload finish response: {response}")
+        return response
 
     def publish_video_post(self, page_id: str, message: str, video_path: str, title: Optional[str] = None, location: Optional[str] = None) -> Optional[Dict]:
         try:
@@ -362,16 +364,75 @@ class FbPostManager:
             file_size = os.path.getsize(video_path)
             logger.info(f"Attempting to upload video. File size: {file_size / (1024 * 1024):.2f} MB")
 
-            post = self._chunked_upload(page_id, video_path, title or "Uploaded video", message)
+            # Start the upload session
+            session_data = self.api_client.put_object(
+                page_id,
+                "videos",
+                data={
+                    "upload_phase": "start",
+                    "file_size": file_size
+                }
+            )
+            upload_session_id = session_data.get('upload_session_id')
+            if not upload_session_id:
+                logger.error("Failed to get upload_session_id")
+                return None
 
-            post_id = post.get('id')
-            post_url = f"https://www.facebook.com/{post_id}"
-            media_link = post.get('source', '')
+            # Upload the video in chunks
+            chunk_size = 4 * 1024 * 1024  # 4MB chunks
+            with open(video_path, 'rb') as video_file:
+                offset = 0
+                while offset < file_size:
+                    chunk = video_file.read(chunk_size)
+                    if not chunk:
+                        break
+
+                    encoder = MultipartEncoder(
+                        fields={
+                            'upload_phase': 'transfer',
+                            'upload_session_id': upload_session_id,
+                            'start_offset': str(offset),
+                            'video_file_chunk': ('chunk', chunk, 'application/octet-stream')
+                        }
+                    )
+
+                    self.api_client.put_object(
+                        page_id,
+                        "videos",
+                        data=encoder,
+                        headers={'Content-Type': encoder.content_type}
+                    )
+
+                    offset += len(chunk)
+                    logger.info(f"Uploaded {offset}/{file_size} bytes")
+
+            # Finish the upload and publish the video
+            finish_data = {
+                "upload_phase": "finish",
+                "upload_session_id": upload_session_id,
+                "title": title or "Uploaded video",
+                "description": message,
+            }
+            if location:
+                finish_data["place"] = json.dumps({"location": location})
+
+            post = self.api_client.put_object(page_id, "videos", data=finish_data)
+
+            if not post or 'id' not in post:
+                logger.error(f"Failed to get post ID after upload. Response: {post}")
+                return None
+
+            post_id = post['id']
+            
+            # Fetch additional details about the post
+            post_details = self.api_client.get_object(post_id, fields="permalink_url")
+            post_url = post_details.get('permalink_url', f"https://www.facebook.com/{post_id}")
+
             logger.info(f"Video post published successfully. Post ID: {post_id}, URL: {post_url}")
             return {
                 "id": post_id,
                 "link": post_url,
-                "media_links": media_link,
+                "media_links": post_url,
                 "media_ids": [post_id]
             }
         except Exception as e:
@@ -386,11 +447,72 @@ class FbPostManager:
             file_size = os.path.getsize(video_path)
             logger.info(f"Attempting to upload reel. File size: {file_size / (1024 * 1024):.2f} MB")
 
-            post = self._chunked_upload(page_id, video_path, title or "Uploaded reel", message, is_reel=True)
+            # Start the upload session
+            session_data = self.api_client.put_object(
+                page_id,
+                "video_reels",
+                data={
+                    "upload_phase": "start",
+                    "file_size": file_size
+                }
+            )
+            upload_session_id = session_data.get('upload_session_id')
+            if not upload_session_id:
+                logger.error("Failed to get upload_session_id")
+                return None
 
-            post_id = post.get('id')
-            post_url = f"https://www.facebook.com/{post_id}"
-            media_link = post.get('source', '')
+            # Upload the video in chunks
+            chunk_size = 4 * 1024 * 1024  # 4MB chunks
+            with open(video_path, 'rb') as video_file:
+                offset = 0
+                while offset < file_size:
+                    chunk = video_file.read(chunk_size)
+                    if not chunk:
+                        break
+
+                    encoder = MultipartEncoder(
+                        fields={
+                            'upload_phase': 'transfer',
+                            'upload_session_id': upload_session_id,
+                            'start_offset': str(offset),
+                            'video_file_chunk': ('chunk', chunk, 'application/octet-stream')
+                        }
+                    )
+
+                    self.api_client.put_object(
+                        page_id,
+                        "video_reels",
+                        data=encoder,
+                        headers={'Content-Type': encoder.content_type}
+                    )
+
+                    offset += len(chunk)
+                    logger.info(f"Uploaded {offset}/{file_size} bytes")
+
+            # Finish the upload
+            finish_data = {
+                "upload_phase": "finish",
+                "upload_session_id": upload_session_id,
+                "title": title or "Uploaded reel",
+                "description": message,
+                "video_state": "PUBLISHED",
+            }
+            if location:
+                finish_data["place"] = json.dumps({"location": location})
+
+            post = self.api_client.put_object(page_id, "video_reels", data=finish_data)
+
+            if not post or 'id' not in post:
+                logger.error(f"Failed to get post ID after upload. Response: {post}")
+                return None
+
+            post_id = post['id']
+            
+            # Fetch additional details about the post
+            post_details = self.api_client.get_object(post_id, fields="permalink_url,source")
+            post_url = post_details.get('permalink_url', f"https://www.facebook.com/{post_id}")
+            media_link = post_details.get('source', '')
+
             logger.info(f"Reel published successfully. Post ID: {post_id}, URL: {post_url}")
             return {
                 "id": post_id,
@@ -532,9 +654,28 @@ class FbPostManager:
                 logger.info(
                     f"Post published successfully. Type: {post_type}, ID: {result.get('id')}, URL: {result.get('link')}"
                 )
+                
+                # Update the post_data with the published information
+                post_data['Published? Y/N'] = 'Y'
+                post_data['Date and Time'] = self.post_composer.get_current_datetime()
+                post_data['ID (str.)'] = result.get('id', '')
+                post_data['Media IDs'] = ','.join(result.get('media_ids', []))
+                post_data['Post link'] = result.get('link', '')
+
             return result
         except Exception as e:
             logger.error(f"Error publishing post: {str(e)}")
             traceback.print_exc()
             return None
+
+
+
+
+
+
+
+
+
+
+
 
