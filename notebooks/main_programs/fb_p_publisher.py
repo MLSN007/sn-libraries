@@ -15,12 +15,14 @@ logger = logging.getLogger(__name__)
 def main():
     setup_logging()
 
+    # -------------------------------------------------------------------------
     # Load configuration for FB user+page
     config_file = r"C:\Users\manue\Documents\GitHub007\sn-libraries\config_files\FB_JK_JK Travel_JK Travel_config.json"
     config_loader = FbConfigLoader(config_file)
     logger.info("Facebook configuration and credentials loaded successfully")
 
-    # Set up Google Sheets configuration
+    # -------------------------------------------------------------------------
+    # Set up Google Sheets configuration -------------------------------------
     account_id = "JK"
     spreadsheet_id = "1wrvG3wmptA76kywbVe1gy5as-ALDzmebLvqoxWIw9mw"
     logger.info(
@@ -30,6 +32,8 @@ def main():
     # Define the source path for media files
     source_path = r"C:\Users\manue\Downloads\tests"
     logger.info(f"Source path for media files: {source_path}")
+    # -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
 
     # Initialize components
     api_client = FbApiClient(config_loader.credentials)
