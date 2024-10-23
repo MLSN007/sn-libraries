@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import pytz
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -18,6 +19,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build, Resource
 import google.auth.transport.requests
 
+logging.basicConfig(level=logging.DEBUG)  # Change level to DEBUG
 logger = logging.getLogger(__name__)
 
 
@@ -81,29 +83,36 @@ class GoogleSheetsHandler:
         """
         try:
             config_path = self._get_config_path()
-            
+
             if not self.use_oauth and config_path and os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = json.load(f)
-                if "token" in config:
-                    token_data = config["token"]
-                    if isinstance(token_data, str):
-                        token_data = json.loads(token_data)
-                    self.creds = Credentials.from_authorized_user_info(token_data, self.SCOPES)
-
+                    if "token" in config:
+                        token_data = config["token"]
+                        if isinstance(token_data, str):
+                            token_data = json.loads(token_data)
+                        self.creds = Credentials.from_authorized_user_info(
+                            token_data, self.SCOPES
+                        )
+           
             if not self.creds or not self.creds.valid:
                 if self.creds and self.creds.expired and self.creds.refresh_token:
                     self.creds.refresh(Request())
                 else:
-                    client_secrets_file = os.getenv(f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}")
+                    client_secrets_file = os.getenv(
+                        f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}"
+                    )
                     if not client_secrets_file:
-                        raise ValueError(f"Client secrets file path not set for {self.account_id}")
-                    
+                        raise ValueError(
+                            f"Client secrets file path not set for {self.account_id}"
+                        )
+
                     flow = InstalledAppFlow.from_client_secrets_file(
-                        client_secrets_file, 
-                        self.SCOPES
+                        client_secrets_file, self.SCOPES
                     )
                     self.creds = flow.run_local_server(port=0)
+
+            print(f"Token expiry time: {self.creds.expiry}")
 
             # Save the credentials
             if not self.use_oauth and config_path:
@@ -113,23 +122,25 @@ class GoogleSheetsHandler:
 
             # Build services with static HTTP
             self.sheets_service = build(
-                "sheets", 
-                "v4", 
-                credentials=self.creds,
-                static_discovery=True
+                "sheets", "v4", credentials=self.creds, static_discovery=True
             )
             self.drive_service = build(
-                "drive", 
-                "v3", 
-                credentials=self.creds,
-                static_discovery=True
+                "drive", "v3", credentials=self.creds, static_discovery=True
             )
-            
+
             logger.info("Successfully authenticated with Google services")
-            
-        except Exception as e:
-            logger.error(f"Authentication failed: {str(e)}")
-            raise
+
+        except RefreshError as e:
+            print(f"Error refreshing token: {e}")
+            # Handle the error (e.g., log the error, retry with exponential backoff)
+
+        except HttpError as e:
+            if e.resp.status in [401, 403]:  # 401 Unauthorized or 403 Forbidden
+                print(f"Authorization error: {e}")
+                # Handle authorization errors (e.g., re-authenticate)
+            else:
+                print(f"An HTTP error occurred: {e}")
+                # Handle other HTTP errors
 
     def create_spreadsheet(self, title: str, folder_id: str) -> Optional[str]:
         """
@@ -180,6 +191,10 @@ class GoogleSheetsHandler:
                 .execute()
             )
             return result.get("values", [])
+        except RefreshError as e:
+            print(f"Error refreshing token: {e}")
+            # Handle the error (e.g., log the error, retry with exponential backoff)
+
         except HttpError as error:
             if error.resp.status == 403:
                 print(
@@ -215,29 +230,36 @@ class GoogleSheetsHandler:
             print(f"An error occurred while writing to spreadsheet: {error}")
             return None
 
-    def get_folder_id(
-        self, folder_name: str, parent_folder_id: str = "root"
-    ) -> Optional[str]:
+    def get_folder_id(self, folder_name: str) -> str:
+        """
+        Get the ID of a folder in Google Drive.
+
+        Args:
+            folder_name (str): The name of the folder to find.
+
+        Returns:
+            str: The ID of the folder, or None if not found.
+        """
         try:
             query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
-            if parent_folder_id != "root":
-                query += f" and '{parent_folder_id}' in parents"
-
-            results = (
-                self.drive_service.files()
-                .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
-                .execute()
-            )
-
-            items = results.get("files", [])
-            if items:
-                logger.info(f"Found folder '{folder_name}' with ID: {items[0]['id']}")
-                return items[0]["id"]
-            else:
+            logger.debug(f"Executing Drive API query: {query}")
+            
+            results = self.drive_service.files().list(
+                q=query,
+                spaces='drive',
+                fields="files(id, name)",
+                pageSize=1
+            ).execute()
+            
+            logger.debug(f"Drive API response: {results}")
+            
+            items = results.get('files', [])
+            if not items:
                 logger.warning(f"Folder '{folder_name}' not found")
                 return None
-        except HttpError as error:
-            logger.error(f"An error occurred while getting folder ID: {error}")
+            return items[0]['id']
+        except Exception as e:
+            logger.error(f"Error while getting folder ID: {str(e)}")
             return None
 
     def read_range(self, spreadsheet_id: str, range_name: str) -> List[List[Any]]:
@@ -367,4 +389,26 @@ class GoogleSheetsHandler:
                 f"An error occurred while searching for file '{file_name}': {error}"
             )
             raise
+
+    def get_user_email(self):
+        """Returns the email address of the authenticated user."""
+        try:
+            # Assuming self.creds is an instance of google.oauth2.credentials.Credentials
+            user_info = self.creds.id_token
+            print(f"User info: {user_info}")
+            print(type(user_info))
+            if user_info and isinstance(
+                user_info, dict
+            ):  # Check if user_info is a dictionary
+                return user_info.get("email")
+            else:
+                print(
+                    "Error: Could not retrieve user email. User info is not in the expected format."
+                )
+                return None
+        except AttributeError:
+            print(
+                "Error: Could not retrieve user email. Credentials might be missing or invalid."
+            )
+            return None
 

@@ -2,9 +2,13 @@ import logging
 from ig_gs_handling import IgGSHandling
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG,  # Changed from INFO to DEBUG
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Set logging level for google_sheets_handler to DEBUG
+logging.getLogger('google_sheets_handler').setLevel(logging.DEBUG)
 
 
 def main():

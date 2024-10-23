@@ -5,7 +5,7 @@ from google_sheets_handler import GoogleSheetsHandler
 from ig_utils import IgUtils
 from ig_client import IgClient
 
-
+logging.basicConfig(level=logging.DEBUG)  # Change level to DEBUG
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +35,20 @@ class IgGSHandling:
     def authenticate_and_setup(self):
         """Authenticate with Google and set up the necessary services."""
         self.gs_handler.authenticate()
+
+        # Print statement to check credentials
+        print("\nCredentials:", self.gs_handler.creds)
+        print("\nToken:", self.gs_handler.creds.token)
+        print("\nJSON:", self.gs_handler.creds.to_json())
+        print(" --- ")
+
+        if not self.gs_handler.creds or not self.gs_handler.creds.valid:
+            logger.error("Authentication failed. Exiting.")
+            return False
+
         self.folder_id = self.gs_handler.get_folder_id(self.folder_name)
+        print(f"Folder ID: {self.folder_id}")
+
         if not self.folder_id:
             logger.error(
                 f"Folder '{self.folder_name}' not found. Please check the folder name and permissions."
