@@ -2,7 +2,8 @@ import json
 import logging
 from typing import Optional, Any
 
-class Config:
+
+class IgConfig:
     """Configuration class for loading settings from a JSON file.
 
     This class provides a simple interface for loading configuration settings from a
@@ -13,7 +14,6 @@ class Config:
         config_file_path (str): The path to the JSON configuration file.
         config (dict): The loaded configuration dictionary.
     """
-
 
     def __init__(self, config_file_path="config.json"):
         """
@@ -40,7 +40,7 @@ class Config:
             logging.warning(
                 f"Config file not found at {self.config_file_path}. Using default values."
             )
-        except json.JSONDecodeError as e: # Added JSONDecodeError handling
+        except json.JSONDecodeError as e:  # Added JSONDecodeError handling
             self.config = {}
             logging.error(f"Error loading config file: {e}")
 

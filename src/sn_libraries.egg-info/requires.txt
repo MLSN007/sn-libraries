@@ -1,4 +1,3 @@
-facebook-sdk~=3.1.0
 instagrapi~=2.1.2
 hikerapi
 requests

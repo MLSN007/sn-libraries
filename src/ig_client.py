@@ -11,6 +11,8 @@ from typing import Optional, Union
 from instagrapi import Client
 from instagrapi.exceptions import ClientLoginRequired, ClientError
 from instagrapi.types import StoryHashtag, StoryLink, StoryMention, StorySticker 
+from pathlib import Path
+from ig_config import IgConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,30 +30,40 @@ class IgClient:
         ClientError: If there's an error loading the session file.
     """
 
-    
-    def __init__(self, session_file: str = "cl_ig.pkl") -> None:
+    def __init__(self, account_id: str):
         """
         Initialize the IgClient instance.
 
         Args:
-            session_file (str): The filename of the saved session. Default is "cl_ig.pkl".
+            account_id (str): The ID of the Instagram account.
 
         Raises:
             FileNotFoundError: If the session file does not exist.
             ClientError: If there's an error loading the session file.
         """
+        self.account_id = account_id
+        self.config = IgConfig(account_id)
         self.client = Client()
-        self.session_file = session_file
+        self.session_file = self._get_session_file_path()
 
-        if not os.path.exists(session_file):
-            raise FileNotFoundError("Session file not found. Please authenticate first.")
+        if os.path.exists(self.session_file):
+            self.load_session()
+        else:
+            self.login()
 
-        try:
-            self.client.load_settings(session_file)
-            logger.info("Session loaded successfully.")
-        except ClientError as e: 
-            logger.error(f"An error occurred loading the session file: {e}")
-            raise
+    def _get_session_file_path(self) -> str:
+        return str(Path(f"sessions/{self.account_id}_session.json").resolve())
+
+    def load_session(self):
+        self.client.load_settings(self.session_file)
+        self.client.login(self.config.username, self.config.password)
+
+    def login(self):
+        self.client.login(self.config.username, self.config.password)
+        self.save_session()
+
+    def save_session(self):
+        self.client.dump_settings(self.session_file)
 
     def get_user_id(self, username: str) -> Optional[int]:
         """

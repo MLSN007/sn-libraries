@@ -11,12 +11,8 @@ src/sn_main/__init__.py
 src/sn_main/initial_setup.py
 src/sn_main/fb/__init__.py
 src/sn_main/ig/__init__.py
-src/sn_main/ig/ig_client.py
-src/sn_main/ig/ig_config.py
-src/sn_main/ig/ig_data.py
 src/sn_main/ig/ig_follow_manager.py
 src/sn_main/ig/ig_info_analyzer.py
 src/sn_main/ig/ig_info_fetcher.py
 src/sn_main/ig/ig_post_manager.py
 src/sn_main/ig/ig_st_manager.py
-src/sn_main/ig/ig_utils.py

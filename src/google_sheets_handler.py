@@ -1,16 +1,18 @@
-import os
 import json
-from typing import Optional, List, Dict, Any
+import logging
+import os
+from datetime import datetime
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow, Flow
+from google.oauth2 import service_account
+from google_auth_oauthlib.flow import Flow, InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from google.oauth2 import service_account
-from datetime import datetime
-import logging
-from google.auth.exceptions import RefreshError
-from dataclasses import dataclass
+import google.auth.transport.requests
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +106,9 @@ class GoogleSheetsHandler:
                 token_data = self.creds.to_json()
                 json.dump({"token": token_data}, f)
 
-        self.sheets_service = build("sheets", "v4", credentials=self.creds)
-        self.drive_service = build("drive", "v3", credentials=self.creds)
+        request = google.auth.transport.requests.Request()
+        self.sheets_service = build("sheets", "v4", credentials=self.creds, requestBuilder=request)
+        self.drive_service = build("drive", "v3", credentials=self.creds, requestBuilder=request)
 
     def create_spreadsheet(self, title: str, folder_id: str) -> Optional[str]:
         """
@@ -195,16 +198,26 @@ class GoogleSheetsHandler:
         self, folder_name: str, parent_folder_id: str = "root"
     ) -> Optional[str]:
         try:
-            query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and '{parent_folder_id}' in parents"
-            results = (
-                self.drive_service.files()
-                .list(q=query, spaces="drive", fields="files(id, name)")
-                .execute()
-            )
+            query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
+            if parent_folder_id != "root":
+                query += f" and '{parent_folder_id}' in parents"
+            
+            results = self.drive_service.files().list(
+                q=query,
+                spaces="drive",
+                fields="files(id, name)",
+                pageSize=1
+            ).execute()
+            
             items = results.get("files", [])
-            return items[0]["id"] if items else None
+            if items:
+                logger.info(f"Found folder '{folder_name}' with ID: {items[0]['id']}")
+                return items[0]["id"]
+            else:
+                logger.warning(f"Folder '{folder_name}' not found")
+                return None
         except HttpError as error:
-            print(f"An error occurred while getting folder ID: {error}")
+            logger.error(f"An error occurred while getting folder ID: {error}")
             return None
 
     def read_range(self, spreadsheet_id: str, range_name: str) -> List[List[Any]]:
@@ -276,3 +289,60 @@ class GoogleSheetsHandler:
         except HttpError as error:
             print(f"An error occurred while appending to spreadsheet: {error}")
             return None
+
+    def batch_update(self, spreadsheet_id: str, updates: List[Dict[str, Any]]) -> None:
+        """
+        Perform a batch update on the spreadsheet.
+
+        Args:
+            spreadsheet_id (str): The ID of the spreadsheet to update.
+            updates (List[Dict[str, Any]]): A list of update operations to perform.
+
+        Raises:
+            HttpError: If an error occurs during the API call.
+        """
+        try:
+            body = {
+                'valueInputOption': 'USER_ENTERED',
+                'data': updates
+            }
+            self.sheets_service.spreadsheets().values().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body=body
+            ).execute()
+            logger.info(f"Batch update completed successfully for {len(updates)} operations.")
+        except HttpError as error:
+            logger.error(f"An error occurred during batch update: {error}")
+            raise
+
+    def find_file_id(self, folder_id: str, file_name: str) -> Optional[str]:
+        """
+        Find the ID of a file in a specific folder.
+
+        Args:
+            folder_id (str): The ID of the folder to search in.
+            file_name (str): The name of the file to find.
+
+        Returns:
+            Optional[str]: The ID of the file if found, None otherwise.
+
+        Raises:
+            HttpError: If an error occurs during the API call.
+        """
+        try:
+            query = f"'{folder_id}' in parents and name = '{file_name}' and trashed = false"
+            results = self.drive_service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name)',
+                pageSize=1
+            ).execute()
+            files = results.get('files', [])
+            if files:
+                return files[0]['id']
+            else:
+                logger.warning(f"File '{file_name}' not found in folder '{folder_id}'")
+                return None
+        except HttpError as error:
+            logger.error(f"An error occurred while searching for file '{file_name}': {error}")
+            raise
