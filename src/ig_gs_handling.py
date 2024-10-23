@@ -1,7 +1,6 @@
 import logging
 import random
-from typing import List, Optional, Dict, Any
-
+from typing import Optional
 from google_sheets_handler import GoogleSheetsHandler
 from ig_utils import IgUtils
 from ig_client import IgClient
@@ -11,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 class IgGSHandling:
+    """Handles Instagram Google Sheets operations."""
+
     def __init__(self, account_id: str, folder_name: str = "ig JK tests"):
         """
         Initialize the IgGSHandling class.
@@ -22,28 +23,40 @@ class IgGSHandling:
         self.account_id = account_id
         self.folder_name = folder_name
         self.gs_handler = GoogleSheetsHandler(account_id)
-        self.ig_client = IgClient(account_id)
-        self.ig_utils = IgUtils(self.ig_client.client)
-        self.spreadsheet_id = None
-        self.folder_id = None
+        try:
+            self.ig_client = IgClient(account_id)
+            self.ig_utils = IgUtils(self.ig_client.client)
+        except Exception as e:
+            logger.error(f"Error initializing IgClient or IgUtils: {str(e)}")
+            raise
+        self.spreadsheet_id: Optional[str] = None
+        self.folder_id: Optional[str] = None
 
     def authenticate_and_setup(self):
         """Authenticate with Google and set up the necessary services."""
         self.gs_handler.authenticate()
         self.folder_id = self.gs_handler.get_folder_id(self.folder_name)
         if not self.folder_id:
-            logger.error(f"Folder '{self.folder_name}' not found. Please check the folder name and permissions.")
+            logger.error(
+                f"Folder '{self.folder_name}' not found. Please check the folder name and permissions."
+            )
             return False
 
         spreadsheet_name = f"ig {self.account_id} Post table"
-        spreadsheets = self.gs_handler.read_spreadsheet(self.folder_id, f"name = '{spreadsheet_name}'")
+        spreadsheets = self.gs_handler.read_spreadsheet(
+            self.folder_id, f"name = '{spreadsheet_name}'"
+        )
         if spreadsheets and len(spreadsheets) > 0:
-            self.spreadsheet_id = spreadsheets[0]['id']
+            self.spreadsheet_id = spreadsheets[0]["id"]
         else:
-            logger.error(f"Spreadsheet '{spreadsheet_name}' not found in folder '{self.folder_name}'")
+            logger.error(
+                f"Spreadsheet '{spreadsheet_name}' not found in folder '{self.folder_name}'"
+            )
             return False
 
-        logger.info(f"Successfully set up with folder ID: {self.folder_id} and spreadsheet ID: {self.spreadsheet_id}")
+        logger.info(
+            f"Successfully set up with folder ID: {self.folder_id} and spreadsheet ID: {self.spreadsheet_id}"
+        )
         return True
 
     def update_location_ids(self):

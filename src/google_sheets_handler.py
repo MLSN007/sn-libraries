@@ -3,15 +3,19 @@ import logging
 import os
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from googleapiclient._apis.sheets.v4.resources import SpreadsheetsResource
+    from googleapiclient._apis.drive.v3.resources import FilesResource
 
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from google_auth_oauthlib.flow import Flow, InstalledAppFlow
-from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from googleapiclient.discovery import build, Resource
 import google.auth.transport.requests
 
 logger = logging.getLogger(__name__)
@@ -52,8 +56,8 @@ class GoogleSheetsHandler:
         self.use_oauth = use_oauth
         self.config_path = self._get_config_path()
         self.creds: Optional[Credentials] = None
-        self.sheets_service: Optional[Any] = None
-        self.drive_service: Optional[Any] = None
+        self.sheets_service: Optional[Resource] = None
+        self.drive_service: Optional[Resource] = None
 
     def _get_config_path(self) -> Optional[str]:
         """Get the configuration file path from environment variables."""
@@ -75,40 +79,57 @@ class GoogleSheetsHandler:
 
         The method also refreshes expired tokens and saves new tokens in development mode.
         """
-        if not self.use_oauth and self.config_path and os.path.exists(self.config_path):
-            with open(self.config_path, "r") as f:
-                config = json.load(f)
-            if "token" in config:
-                token_data = config["token"]
-                if isinstance(token_data, str):
-                    token_data = json.loads(token_data)
-                if isinstance(token_data, dict):
+        try:
+            config_path = self._get_config_path()
+            
+            if not self.use_oauth and config_path and os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                if "token" in config:
+                    token_data = config["token"]
+                    if isinstance(token_data, str):
+                        token_data = json.loads(token_data)
                     self.creds = Credentials.from_authorized_user_info(token_data, self.SCOPES)
+
+            if not self.creds or not self.creds.valid:
+                if self.creds and self.creds.expired and self.creds.refresh_token:
+                    self.creds.refresh(Request())
                 else:
-                    print(f"Invalid token data format: {type(token_data)}")
-                    self.creds = None
+                    client_secrets_file = os.getenv(f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}")
+                    if not client_secrets_file:
+                        raise ValueError(f"Client secrets file path not set for {self.account_id}")
+                    
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        client_secrets_file, 
+                        self.SCOPES
+                    )
+                    self.creds = flow.run_local_server(port=0)
 
-        if not self.creds or not self.creds.valid:
-            if self.creds and self.creds.expired and self.creds.refresh_token:
-                self.creds.refresh(Request())
-            elif self.use_oauth:
-                client_secrets_file = os.getenv(f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}")
-                if not client_secrets_file:
-                    raise ValueError(f"Client secrets file path not set for {self.account_id}")
-                flow = Flow.from_client_secrets_file(client_secrets_file, self.SCOPES)
-                flow.run_local_server(port=0)
-                self.creds = flow.credentials
-            else:
-                raise ValueError("No valid credentials available. Please set up the config file or use OAuth.")
+            # Save the credentials
+            if not self.use_oauth and config_path:
+                with open(config_path, "w") as f:
+                    token_data = self.creds.to_json()
+                    json.dump({"token": token_data}, f)
 
-        if not self.use_oauth and self.config_path:
-            with open(self.config_path, "w") as f:
-                token_data = self.creds.to_json()
-                json.dump({"token": token_data}, f)
-
-        request = google.auth.transport.requests.Request()
-        self.sheets_service = build("sheets", "v4", credentials=self.creds, requestBuilder=request)
-        self.drive_service = build("drive", "v3", credentials=self.creds, requestBuilder=request)
+            # Build services with static HTTP
+            self.sheets_service = build(
+                "sheets", 
+                "v4", 
+                credentials=self.creds,
+                static_discovery=True
+            )
+            self.drive_service = build(
+                "drive", 
+                "v3", 
+                credentials=self.creds,
+                static_discovery=True
+            )
+            
+            logger.info("Successfully authenticated with Google services")
+            
+        except Exception as e:
+            logger.error(f"Authentication failed: {str(e)}")
+            raise
 
     def create_spreadsheet(self, title: str, folder_id: str) -> Optional[str]:
         """
@@ -201,14 +222,13 @@ class GoogleSheetsHandler:
             query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
             if parent_folder_id != "root":
                 query += f" and '{parent_folder_id}' in parents"
-            
-            results = self.drive_service.files().list(
-                q=query,
-                spaces="drive",
-                fields="files(id, name)",
-                pageSize=1
-            ).execute()
-            
+
+            results = (
+                self.drive_service.files()
+                .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
+                .execute()
+            )
+
             items = results.get("files", [])
             if items:
                 logger.info(f"Found folder '{folder_name}' with ID: {items[0]['id']}")
@@ -302,15 +322,13 @@ class GoogleSheetsHandler:
             HttpError: If an error occurs during the API call.
         """
         try:
-            body = {
-                'valueInputOption': 'USER_ENTERED',
-                'data': updates
-            }
+            body = {"valueInputOption": "USER_ENTERED", "data": updates}
             self.sheets_service.spreadsheets().values().batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body=body
+                spreadsheetId=spreadsheet_id, body=body
             ).execute()
-            logger.info(f"Batch update completed successfully for {len(updates)} operations.")
+            logger.info(
+                f"Batch update completed successfully for {len(updates)} operations."
+            )
         except HttpError as error:
             logger.error(f"An error occurred during batch update: {error}")
             raise
@@ -330,19 +348,23 @@ class GoogleSheetsHandler:
             HttpError: If an error occurs during the API call.
         """
         try:
-            query = f"'{folder_id}' in parents and name = '{file_name}' and trashed = false"
-            results = self.drive_service.files().list(
-                q=query,
-                spaces='drive',
-                fields='files(id, name)',
-                pageSize=1
-            ).execute()
-            files = results.get('files', [])
+            query = (
+                f"'{folder_id}' in parents and name = '{file_name}' and trashed = false"
+            )
+            results = (
+                self.drive_service.files()
+                .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
+                .execute()
+            )
+            files = results.get("files", [])
             if files:
-                return files[0]['id']
+                return files[0]["id"]
             else:
                 logger.warning(f"File '{file_name}' not found in folder '{folder_id}'")
                 return None
         except HttpError as error:
-            logger.error(f"An error occurred while searching for file '{file_name}': {error}")
+            logger.error(
+                f"An error occurred while searching for file '{file_name}': {error}"
+            )
             raise
+

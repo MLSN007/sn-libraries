@@ -1,57 +1,58 @@
-import json
+import os
 import logging
-from typing import Optional, Any
+from typing import Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 class IgConfig:
-    """Configuration class for loading settings from a JSON file.
+    """Configuration class for Instagram credentials using environment variables.
 
-    This class provides a simple interface for loading configuration settings from a
-    JSON file. If the file doesn't exist, it logs a warning and uses an empty
-    dictionary as the default configuration.
+    This class manages Instagram credentials for different accounts using environment variables:
+    - Username is stored in IG_{account}_user
+    - Password is stored in IG_{account}_psw
 
-    Attributes:
-        config_file_path (str): The path to the JSON configuration file.
-        config (dict): The loaded configuration dictionary.
+    Example:
+        For account 'JK':
+        - Username is stored in IG_JK_user
+        - Password is stored in IG_JK_psw
     """
 
-    def __init__(self, config_file_path="config.json"):
-        """
-        Initialize the Config class.
+    def __init__(self, account_id: str):
+        """Initialize Instagram configuration for a specific account.
 
         Args:
-            config_file_path: Path to the JSON configuration file (default: "config.json").
+            account_id (str): The identifier for the Instagram account (e.g., 'JK')
         """
-        self.config_file_path = config_file_path
+        self.account_id = account_id
+        self.username: Optional[str] = None
+        self.password: Optional[str] = None
         self.load_config()
 
-    def load_config(self):
-        """Loads configuration settings from the JSON file.
-
-        If the file is not found, logs a warning and initializes an empty configuration.
-        """
-
+    def load_config(self) -> None:
+        """Load configuration from environment variables."""
         try:
-            with open(self.config_file_path, "r", encoding="utf-8") as config_file:
-                self.config = json.load(config_file)
+            # Get username from environment variable
+            self.username = os.getenv(f"IG_{self.account_id}_user")
+            if not self.username:
+                logger.error(
+                    f"Environment variable IG_{self.account_id}_user not found"
+                )
+                raise ValueError(f"Username not set for account {self.account_id}")
 
-        except FileNotFoundError:
-            self.config = {}  # Use empty dictionary if config file not found
-            logging.warning(
-                f"Config file not found at {self.config_file_path}. Using default values."
+            # Get password from environment variable
+            self.password = os.getenv(f"IG_{self.account_id}_psw")
+            if not self.password:
+                logger.error(f"Environment variable IG_{self.account_id}_psw not found")
+                raise ValueError(f"Password not set for account {self.account_id}")
+
+            logger.info(
+                f"Successfully loaded credentials for account {self.account_id}"
             )
-        except json.JSONDecodeError as e:  # Added JSONDecodeError handling
-            self.config = {}
-            logging.error(f"Error loading config file: {e}")
 
-    def get(self, key: str, default: Optional[Any] = None) -> Any:
-        """Retrieves a configuration value by key.
-
-        Args:
-            key (str): The configuration key.
-            default (Any, optional): The default value to return if the key is not found.
-
-        Returns:
-            Any: The configuration value associated with the key, or the default value if the key is not found.
-        """
-        return self.config.get(key, default)
+        except Exception as e:
+            logger.error(
+                f"Error loading config for account {self.account_id}: {str(e)}"
+            )
+            raise

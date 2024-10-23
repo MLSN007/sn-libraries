@@ -9,7 +9,7 @@ import os
 import logging
 from typing import Optional, Union
 from instagrapi import Client
-from instagrapi.exceptions import ClientLoginRequired, ClientError
+from instagrapi.exceptions import ClientLoginRequired, ClientError, UserNotFound
 from instagrapi.types import StoryHashtag, StoryLink, StoryMention, StorySticker 
 from pathlib import Path
 from ig_config import IgConfig
@@ -55,10 +55,16 @@ class IgClient:
         return str(Path(f"sessions/{self.account_id}_session.json").resolve())
 
     def load_session(self):
+        """Load existing session and verify it's still valid."""
         self.client.load_settings(self.session_file)
+        if not self.config.username or not self.config.password:
+            raise ValueError("Username or password not set in the config file")
         self.client.login(self.config.username, self.config.password)
 
     def login(self):
+        """Perform a fresh login and save the session."""
+        if not self.config.username or not self.config.password:
+            raise ValueError("Username or password not set in the config file")
         self.client.login(self.config.username, self.config.password)
         self.save_session()
 
@@ -88,42 +94,4 @@ class IgClient:
             return None
         except ClientError as e: 
             logger.error(f"An error occurred fetching user ID for {username}: {e}")
-            raise
-
-    def login(self, username: Optional[str] = None, password: Optional[str] = None) -> None:
-        """
-        Logs into Instagram with the provided credentials and saves the session.
-
-        If username or password are not provided, they are retrieved from the environment variables 
-        IG_JK_user and IG_JK_psw, respectively.
-
-        Args:
-            username (str, optional): Your Instagram username.
-            password (str, optional): Your Instagram password.
-
-        Raises:
-            ValueError: If username and/or password are not provided and are not set in environment variables.
-            ClientLoginRequired: If the login fails (e.g., due to invalid credentials).
-            ClientError: For other Instagrapi-related errors.
-        """
-
-        if not username:
-            username = os.environ.get("IG_JK_user")
-        if not password:
-            password = os.environ.get("IG_JK_psw")
-
-        if not username or not password:
-            raise ValueError(
-                "Username and password must be provided or set as environment variables."
-            )
-
-        try:
-            self.client.login(username, password)
-            logger.info("Connected Successfully!")
-            self.client.dump_settings(self.session_file)  # Save the session
-        except ClientLoginRequired:
-            logger.error("Login failed. Please check your credentials.")
-            raise
-        except ClientError as e:
-            logger.error(f"An error occurred during login: {e}")
             raise

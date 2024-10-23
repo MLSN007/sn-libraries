@@ -17,7 +17,7 @@ from .ig_config import IgConfig
 from .ig_data import IgData
 from .ig_gs_handling import IgGsHandling
 from .ig_utils import IgUtils
-from .main_ig_gs_handling import MainIgGsHandling
+from ..notebooks.main_programs.main_ig_gs_handling import MainIgGsHandling
 from .post_composer import PostComposer
 from .publishing_orchestrator import PublishingOrchestrator
 
