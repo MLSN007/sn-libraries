@@ -80,7 +80,7 @@ class IgGSHandling:
     def update_location_ids(self):
         """Update location IDs for rows with location_str but no location_id."""
         logger.info("Updating location IDs...")
-        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:N")
+        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:S")
         if not data:
             logger.error("Failed to read spreadsheet data")
             return
@@ -95,19 +95,24 @@ class IgGSHandling:
             if row[content_id_index]:  # Skip published content
                 continue
             if row[location_str_index] and not row[location_id_index]:
+                print(
+                    f"\n\n LOCATION STR: {row[location_str_index]} ---- on ROW: {row_index} \n\n"
+                )
                 locations = self.ig_utils.get_top_locations_by_name(
                     row[location_str_index]
                 )
                 if locations:
                     location_id = locations[0].pk
+                    print(f"\n\n LOCATION ID: {location_id} \n\n")
                     updates.append(
-                        {"range": f"N{row_index}", "values": [[location_id]]}
+                        {"range": f"J{row_index}", "values": [[location_id]]}
                     )
                     logger.info(
                         f"Updated location ID for row {row_index}: {location_id}"
                     )
 
         if updates:
+            print("\n\n LOCATION IDS UPDATES", updates, "\n\n")
             self.gs_handler.batch_update(self.spreadsheet_id, updates)
             logger.info(f"Updated {len(updates)} location IDs")
         else:
@@ -116,7 +121,7 @@ class IgGSHandling:
     def update_music_track_ids(self):
         """Update music track IDs for rows with music_reference but no music_track_id."""
         logger.info("Updating music track IDs...")
-        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:O")
+        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:S")
         if not data:
             logger.error("Failed to read spreadsheet data")
             return
@@ -136,7 +141,7 @@ class IgGSHandling:
                     track = random.choice(tracks[:3])  # Random selection from top 3
                     music_track_id = track.id
                     updates.append(
-                        {"range": f"O{row_index}", "values": [[music_track_id]]}
+                        {"range": f"L{row_index}", "values": [[music_track_id]]}
                     )
                     logger.info(
                         f"Updated music track ID for row {row_index}: {music_track_id}"
@@ -160,13 +165,18 @@ class IgGSHandling:
         media_file_names_index = header.index("media_file_names")
         media_paths_index = header.index("media_paths")
         content_id_index = header.index("content_id")
+        print(f"MEDIA FILE NAMES INDEX: {media_file_names_index}")
+        print(f"MEDIA PATHS INDEX: {media_paths_index}")
+        print(f"CONTENT ID INDEX: {content_id_index}")
 
         updates = []
         for row_index, row in enumerate(data[1:], start=2):
+            print(f"\n ROW: {row}    ROW INDEX: {row_index} \n")
             if row[content_id_index]:  # Skip published content
                 continue
             if row[media_file_names_index] and not row[media_paths_index]:
                 file_names = row[media_file_names_index].split(",")
+                print(f"\n\n FILE NAMES: {file_names} \n\n")
                 file_ids = []
                 for file_name in file_names:
                     file_id = self.gs_handler.find_file_id(
@@ -175,15 +185,17 @@ class IgGSHandling:
                     if file_id:
                         file_ids.append(file_id)
                 if file_ids:
+                    print(f"\n\n FILE IDS: {file_ids} \n\n")
                     media_paths = ",".join(file_ids)
                     updates.append(
-                        {"range": f"P{row_index}", "values": [[media_paths]]}
+                        {"range": f"N{row_index}", "values": [[media_paths]]}
                     )
                     logger.info(
                         f"Updated media paths for row {row_index}: {media_paths}"
                     )
 
         if updates:
+            print(updates)
             self.gs_handler.batch_update(self.spreadsheet_id, updates)
             logger.info(f"Updated {len(updates)} media paths")
         else:

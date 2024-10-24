@@ -103,7 +103,7 @@ class IgUtils:
         retries = 0
         while retries < max_retries:
             try:
-                return self.client.client.fbsearch_places(name)
+                return self.client.fbsearch_places(name)
             except (ClientError, ClientJSONDecodeError, ClientConnectionError) as e:
                 retries += 1
                 delay = random.uniform(3, 8)  # Increased random delay

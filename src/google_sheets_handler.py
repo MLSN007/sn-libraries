@@ -86,16 +86,16 @@ class GoogleSheetsHandler:
         try:
             config_path = self._get_config_path()
 
-            #    if not self.use_oauth and config_path and os.path.exists(config_path):
-            #        with open(config_path, "r") as f:
-            #            config = json.load(f)
-            #            if "token" in config:
-            #                token_data = config["token"]
-            #                if isinstance(token_data, str):
-            #                    token_data = json.loads(token_data)
-            #                    self.creds = Credentials.from_authorized_user_info(
-            #                        token_data, self.SCOPES
-            #                    )
+            if not self.use_oauth and config_path and os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                    if "token" in config:
+                        token_data = config["token"]
+                        if isinstance(token_data, str):
+                            token_data = json.loads(token_data)
+                            self.creds = Credentials.from_authorized_user_info(
+                                token_data, self.SCOPES
+                            )
 
             if not self.creds or not self.creds.valid:
                 if self.creds and self.creds.expired and self.creds.refresh_token:

@@ -10,12 +10,13 @@ import logging
 from typing import Optional, Union
 from instagrapi import Client
 from instagrapi.exceptions import ClientLoginRequired, ClientError, UserNotFound
-from instagrapi.types import StoryHashtag, StoryLink, StoryMention, StorySticker 
+from instagrapi.types import StoryHashtag, StoryLink, StoryMention, StorySticker
 from pathlib import Path
 from ig_config import IgConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 class IgClient:
     """
@@ -52,7 +53,8 @@ class IgClient:
             self.login()
 
     def _get_session_file_path(self) -> str:
-        return str(Path(f"sessions/{self.account_id}_session.json").resolve())
+        config_file_path = r"C:\Users\manue\Documents\GitHub007\sn-libraries\sessions"
+        return str(Path(f"{config_file_path}/{self.account_id}_session.json").resolve())
 
     def load_session(self):
         """Load existing session and verify it's still valid."""
@@ -92,6 +94,6 @@ class IgClient:
         except UserNotFound:
             logger.warning(f"User not found: {username}")
             return None
-        except ClientError as e: 
+        except ClientError as e:
             logger.error(f"An error occurred fetching user ID for {username}: {e}")
             raise
