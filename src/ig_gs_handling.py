@@ -32,45 +32,44 @@ class IgGSHandling:
         self.spreadsheet_id: Optional[str] = None
         self.folder_id: Optional[str] = None
 
-    def authenticate_and_setup(self):
-        """Authenticate with Google and set up the necessary services."""
-        self.gs_handler.authenticate()
+    def authenticate_and_setup(self) -> bool:
+        try:
+            self.gs_handler.authenticate()
+            logger.info("Authentication successful")
 
-        # Print statement to check credentials
-        print("\nCredentials:", self.gs_handler.creds)
-        print("\nToken:", self.gs_handler.creds.token)
-        print("\nJSON:", self.gs_handler.creds.to_json())
-        print(" --- ")
+            # Check permissions
+            if not self.gs_handler.check_permissions():
+                logger.error("Failed to check permissions")
+                return False
+            logger.info("Permissions check successful")
 
-        if not self.gs_handler.creds or not self.gs_handler.creds.valid:
-            logger.error("Authentication failed. Exiting.")
-            return False
+            # Get folder ID
+            self.folder_id = self.gs_handler.get_folder_id(self.folder_name)
+            if not self.folder_id:
+                logger.error(f"Folder '{self.folder_name}' not found. Please check the folder name and permissions.")
+                return False
+            logger.info(f"Folder ID retrieved: {self.folder_id}")
 
-        self.folder_id = self.gs_handler.get_folder_id(self.folder_name)
-        print(f"Folder ID: {self.folder_id}")
-
-        if not self.folder_id:
-            logger.error(
-                f"Folder '{self.folder_name}' not found. Please check the folder name and permissions."
+            spreadsheet_name = f"ig {self.account_id} Post table"
+            spreadsheets = self.gs_handler.read_spreadsheet(
+                self.folder_id, f"name = '{spreadsheet_name}'"
             )
-            return False
+            if spreadsheets and len(spreadsheets) > 0:
+                self.spreadsheet_id = spreadsheets[0]["id"]
+            else:
+                logger.error(
+                    f"Spreadsheet '{spreadsheet_name}' not found in folder '{self.folder_name}'"
+                )
+                return False
 
-        spreadsheet_name = f"ig {self.account_id} Post table"
-        spreadsheets = self.gs_handler.read_spreadsheet(
-            self.folder_id, f"name = '{spreadsheet_name}'"
-        )
-        if spreadsheets and len(spreadsheets) > 0:
-            self.spreadsheet_id = spreadsheets[0]["id"]
-        else:
-            logger.error(
-                f"Spreadsheet '{spreadsheet_name}' not found in folder '{self.folder_name}'"
+            logger.info(
+                f"Successfully set up with folder ID: {self.folder_id} and spreadsheet ID: {self.spreadsheet_id}"
             )
-            return False
+            return True
 
-        logger.info(
-            f"Successfully set up with folder ID: {self.folder_id} and spreadsheet ID: {self.spreadsheet_id}"
-        )
-        return True
+        except Exception as e:
+            logger.error(f"Error during authentication and setup: {str(e)}")
+            return False
 
     def update_location_ids(self):
         """Update location IDs for rows with location_str but no location_id."""

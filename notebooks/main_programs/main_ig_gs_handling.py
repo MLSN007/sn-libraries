@@ -1,14 +1,19 @@
+import warnings
+
+warnings.filterwarnings(
+    "ignore", message="file_cache is unavailable when using oauth2client >= 4.0.0"
+)
 import logging
 from ig_gs_handling import IgGSHandling
 
 logging.basicConfig(
     level=logging.DEBUG,  # Changed from INFO to DEBUG
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 # Set logging level for google_sheets_handler to DEBUG
-logging.getLogger('google_sheets_handler').setLevel(logging.DEBUG)
+logging.getLogger("google_sheets_handler").setLevel(logging.DEBUG)
 
 
 def main():
@@ -25,6 +30,7 @@ def main():
         return
 
     try:
+        logger.info("Attempting to authenticate and set up...")
         if not handler.authenticate_and_setup():
             logger.error("Failed to authenticate and set up. Exiting.")
             return

@@ -43,6 +43,8 @@ class GoogleSheetsHandler:
     SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/documents",
     ]
 
     def __init__(self, account_id: str, use_oauth: bool = False):
@@ -94,7 +96,7 @@ class GoogleSheetsHandler:
                         self.creds = Credentials.from_authorized_user_info(
                             token_data, self.SCOPES
                         )
-           
+
             if not self.creds or not self.creds.valid:
                 if self.creds and self.creds.expired and self.creds.refresh_token:
                     self.creds.refresh(Request())
@@ -121,12 +123,8 @@ class GoogleSheetsHandler:
                     json.dump({"token": token_data}, f)
 
             # Build services with static HTTP
-            self.sheets_service = build(
-                "sheets", "v4", credentials=self.creds, static_discovery=True
-            )
-            self.drive_service = build(
-                "drive", "v3", credentials=self.creds, static_discovery=True
-            )
+            self.sheets_service = build("sheets", "v4", credentials=self.creds)
+            self.drive_service = build("drive", "v3", credentials=self.creds)
 
             logger.info("Successfully authenticated with Google services")
 
@@ -230,34 +228,38 @@ class GoogleSheetsHandler:
             print(f"An error occurred while writing to spreadsheet: {error}")
             return None
 
-    def get_folder_id(self, folder_name: str) -> str:
-        """
-        Get the ID of a folder in Google Drive.
-
-        Args:
-            folder_name (str): The name of the folder to find.
-
-        Returns:
-            str: The ID of the folder, or None if not found.
-        """
+    def get_folder_id(self, folder_name: str) -> Optional[str]:
         try:
-            query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
-            logger.debug(f"Executing Drive API query: {query}")
-            
-            results = self.drive_service.files().list(
-                q=query,
-                spaces='drive',
-                fields="files(id, name)",
-                pageSize=1
-            ).execute()
-            
-            logger.debug(f"Drive API response: {results}")
-            
-            items = results.get('files', [])
+            # First, let's list all folders in the root of My Drive
+            query = "mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false"
+            logger.debug(f"Executing Drive API query for all folders: {query}")
+            results = (
+                self.drive_service.files()
+                .list(
+                    q=query,
+                    spaces="drive",
+                    fields="files(id, name)",
+                    pageSize=100,  # Adjust this if you have more folders
+                )
+                .execute()
+            )
+            logger.debug(f"All folders in root: {results}")
+
+            # Now, let's search for our specific folder
+            query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and 'root' in parents and trashed=false"
+            logger.debug(f"Executing Drive API query for specific folder: {query}")
+            results = (
+                self.drive_service.files()
+                .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
+                .execute()
+            )
+            logger.debug(f"Drive API response for specific folder: {results}")
+
+            items = results.get("files", [])
             if not items:
                 logger.warning(f"Folder '{folder_name}' not found")
                 return None
-            return items[0]['id']
+            return items[0]["id"]
         except Exception as e:
             logger.error(f"Error while getting folder ID: {str(e)}")
             return None
@@ -412,3 +414,25 @@ class GoogleSheetsHandler:
             )
             return None
 
+    def check_permissions(self):
+        try:
+            about = self.drive_service.about().get(fields="user,storageQuota").execute()
+            logger.debug(f"User info: {about['user']}")
+            logger.debug(f"Storage quota: {about['storageQuota']}")
+
+            # Try to list drives, but don't fail if user doesn't have access
+            try:
+                drives = self.drive_service.drives().list().execute()
+                logger.debug(f"Accessible drives: {drives}")
+            except HttpError as e:
+                if e.resp.status == 403:
+                    logger.warning(
+                        "User doesn't have access to shared drives. This is not critical."
+                    )
+                else:
+                    raise
+
+            return True
+        except Exception as e:
+            logger.error(f"Error checking permissions: {str(e)}")
+            return False
