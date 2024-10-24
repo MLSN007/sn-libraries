@@ -46,11 +46,13 @@ class IgGSHandling:
             # Get folder ID
             self.folder_id = self.gs_handler.get_folder_id(self.folder_name)
             if not self.folder_id:
-                logger.error(f"Folder '{self.folder_name}' not found. Please check the folder name and permissions.")
+                logger.error(
+                    f"Folder '{self.folder_name}' not found. Please check the folder name and permissions."
+                )
                 return False
             logger.info(f"Folder ID retrieved: {self.folder_id}")
 
-            spreadsheet_name = f"ig {self.account_id} Post table"
+            spreadsheet_name = f"{self.account_id} IG input table"
             spreadsheets = self.gs_handler.read_spreadsheet(
                 self.folder_id, f"name = '{spreadsheet_name}'"
             )
