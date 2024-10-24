@@ -182,6 +182,7 @@ class GoogleSheetsHandler:
         self, spreadsheet_id: str, range_name: str
     ) -> Optional[List[List[Any]]]:
         try:
+            print(f"Reading spreadsheet {spreadsheet_id} with range {range_name}")
             result = (
                 self.sheets_service.spreadsheets()
                 .values()

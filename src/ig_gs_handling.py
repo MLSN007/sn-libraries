@@ -53,17 +53,21 @@ class IgGSHandling:
             logger.info(f"Folder ID retrieved: {self.folder_id}")
 
             spreadsheet_name = f"{self.account_id} IG input table"
-            spreadsheets = self.gs_handler.read_spreadsheet(
-                self.folder_id, f"name = '{spreadsheet_name}'"
+            # Find the spreadsheet ID within the folder
+            self.spreadsheet_id = self.gs_handler.find_file_id(
+                self.folder_id, spreadsheet_name
             )
-            if spreadsheets and len(spreadsheets) > 0:
-                self.spreadsheet_id = spreadsheets[0]["id"]
-            else:
+            if not self.spreadsheet_id:
                 logger.error(
                     f"Spreadsheet '{spreadsheet_name}' not found in folder '{self.folder_name}'"
                 )
                 return False
 
+            # Now you can read the spreadsheet data
+            spreadsheets = self.gs_handler.read_spreadsheet(
+                self.spreadsheet_id,
+                "'Ig Origin Data'!A:R",  # Or the actual range you want to read
+            )
             logger.info(
                 f"Successfully set up with folder ID: {self.folder_id} and spreadsheet ID: {self.spreadsheet_id}"
             )
@@ -147,7 +151,7 @@ class IgGSHandling:
     def update_media_paths(self):
         """Update media_paths for rows with media_file_names but no media_paths."""
         logger.info("Updating media paths...")
-        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:P")
+        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:S")
         if not data:
             logger.error("Failed to read spreadsheet data")
             return
