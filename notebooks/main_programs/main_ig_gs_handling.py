@@ -18,7 +18,9 @@ logging.getLogger("google_sheets_handler").setLevel(logging.DEBUG)
 
 def main():
     account_id = "JK"  # Replace with the actual account ID
-    logger.info("Starting Instagram Google Sheets handling process for account: %s", account_id)
+    logger.info(
+        "Starting Instagram Google Sheets handling process for account: %s", account_id
+    )
 
     try:
         handler = IgGSHandling(account_id)

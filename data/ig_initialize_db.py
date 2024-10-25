@@ -18,7 +18,7 @@ def create_tables():
     cursor.execute(
         """
         CREATE TABLE content (
-            media_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content_id INTEGER PRIMARY KEY AUTOINCREMENT,
             content_type TEXT,
             media_type TEXT,
             title TEXT,
@@ -125,6 +125,7 @@ def create_tables():
 
     # Create indexes
     cursor.execute("CREATE INDEX idx_posts_content_id ON posts (content_id)")
+    cursor.execute("CREATE INDEX idx_reels_content_id ON reels (content_id)")
     cursor.execute("CREATE INDEX idx_stories_content_id ON stories (content_id)")
     cursor.execute("CREATE INDEX idx_content_status ON content (status)")
     # ... add other indexes as needed ...

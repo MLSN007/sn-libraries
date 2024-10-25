@@ -41,8 +41,8 @@ class IgPostManager:
 
     # Constants
 
-    MAX_RETRIES = 1  # Maximum number of retries
-    RETRY_DELAY = 5  # Delay between retries in seconds
+    MAX_RETRIES = 3  # Increased from 1 to 3
+    RETRY_DELAY = 10  # Increased from 5 to 10 seconds
 
 
     def __init__(self, igcl: IgClient) -> None:
@@ -137,49 +137,55 @@ class IgPostManager:
         logger.error(f"Failed to upload photo after {self.MAX_RETRIES} retries.")
         raise e  # Raise the final exception after retries are exhausted
 
-    def upload_video(
-        self, video_path: str, caption: str = "", location: Location = None
-        ) -> IgPostData:
+    def upload_video(self, video_path: str, caption: str = "", location: Location = None) -> Optional[IgPostData]:
         """
-        Uploads a video  to Instagram.
+        Uploads a video to Instagram.
 
         Args:
-            (file_path): Path to the media file.
-            caption (str, optional): Caption for the post (default: "").
-            location (Location, optional): Location object for tagging (default: None).
+            video_path (str): Path to the video file
+            caption (str, optional): Caption for the post (default: "")
+            location (Location, optional): Location object for tagging (default: None)
 
         Returns:
-            IgPostData: An IgPostData object representing the uploaded media.
+            Optional[IgPostData]: An IgPostData object representing the uploaded media.
 
         Raises:
-            FileNotFoundError: If the media file is not found.
-            ValueError: If the file format is not supported.
-            MediaError: If there's an error during the upload process.
-            ClientError: If there's a general Instagrapi client error.
+            FileNotFoundError: If the video file is not found
+            ValueError: If the file format is not supported
+            MediaError: If there's an error during the upload process
+            ClientError: If there's a general Instagrapi client error
         """
-
         if not os.path.isfile(video_path):
+            logger.error(f"Video file not found: {video_path}")
             raise FileNotFoundError(f"Video file not found: {video_path}")
 
         # File extension validation
-        valid_extensions = [".mp4"]  # Add more video extensions if needed
+        valid_extensions = [".mp4"]
         if not video_path.lower().endswith(tuple(valid_extensions)):
-            raise ValueError(
-                "Invalid file format. Only MP4 files are supported."
-            )
+            logger.error(f"Invalid file format: {video_path}. Only MP4 files are supported.")
+            raise ValueError("Invalid file format. Only MP4 files are supported.")
+
+        logger.info(f"Starting video upload process for: {video_path}")
+        logger.info(f"File size: {os.path.getsize(video_path) / (1024*1024):.2f} MB")
 
         retries = 0
         while retries < self.MAX_RETRIES:
             try:
                 extra_data = {}
                 if location:
+                    logger.info(f"Adding location data: {location.pk} - {location.name}")
                     extra_data["location"] = self.client.location_build(location)
 
+                logger.info("Initiating video upload to Instagram...")
+                # Add delay before upload attempt
+                time.sleep(self.RETRY_DELAY)
+                
                 media = self.client.video_upload(
                     video_path, caption=caption, extra_data=extra_data
                 )
+                logger.info(f"Video upload successful. Media ID: {media.id}")
 
-                # Create IgPostData object directly from the returned Media object
+                # Create IgPostData object
                 ig_video_post = IgPostData(
                     media_id=media.id,
                     media_type=media.media_type,
@@ -187,8 +193,8 @@ class IgPostManager:
                     caption=caption,
                     timestamp=media.taken_at,
                     media_url=media.thumbnail_url,
-                    location_pk=location.pk if location else None,  # Extract location ID
-                    location_name=location.name if location else None,  # Extract location name
+                    location_pk=location.pk if location else None,
+                    location_name=location.name if location else None,
                     like_count=media.like_count,
                     comment_count=media.comment_count
                 )
@@ -197,13 +203,13 @@ class IgPostManager:
 
             except (ClientError, MediaError) as e:
                 logger.warning(
-                    f"Error uploading video (attempt {retries + 1}): {e}. Retrying..."
+                    f"Error uploading video (attempt {retries + 1}/{self.MAX_RETRIES}): {e}. Retrying..."
                 )
                 retries += 1
-                time.sleep(self.RETRY_DELAY * retries)
+                time.sleep(self.RETRY_DELAY * retries)  # Increasing delay between retries
 
         logger.error(f"Failed to upload video after {self.MAX_RETRIES} retries.")
-        raise e  # Raise the final exception after retries are exhausted
+        raise Exception(f"Failed to upload video after {self.MAX_RETRIES} retries")
 
     def upload_album(self,
                      paths: List[str], caption: str = "", location: Location = None
@@ -416,5 +422,7 @@ class IgPostManager:
             f"Failed to upload reel with music after {self.MAX_RETRIES} retries."
         )
         raise e  # Raise the final exception after retries are exhausted
+
+
 
 

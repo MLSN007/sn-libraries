@@ -97,3 +97,27 @@ class IgClient:
         except ClientError as e:
             logger.error(f"An error occurred fetching user ID for {username}: {e}")
             raise
+
+    def validate_session(self) -> bool:
+        """
+        Validate the current session and relogin if necessary.
+
+        Returns:
+            bool: True if session is valid or relogin successful, False otherwise
+        """
+        try:
+            # Try to perform a simple operation to test session
+            logger.info("Validating Instagram session...")
+            self.client.account_info()
+            logger.info("Session is valid")
+            return True
+        except Exception as e:
+            logger.warning(f"Session validation failed: {e}")
+            try:
+                logger.info("Attempting to relogin...")
+                self.login()
+                logger.info("Relogin successful")
+                return True
+            except Exception as e:
+                logger.error(f"Relogin failed: {e}")
+                return False
