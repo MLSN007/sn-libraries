@@ -2,7 +2,7 @@ import logging
 import random
 from typing import Optional
 from google_sheets_handler import GoogleSheetsHandler
-from ig_utils import IgUtils
+from ig_utils import IgUtils, get_db_connection
 from ig_client import IgClient
 
 logging.basicConfig(level=logging.DEBUG)  # Change level to DEBUG
@@ -23,6 +23,10 @@ class IgGSHandling:
         self.account_id = account_id
         self.folder_name = folder_name
         self.gs_handler = GoogleSheetsHandler(account_id)
+        db_path = f"C:/Users/manue/Documents/GitHub007/sn-libraries/data/{account_id}_ig.db"
+        self.db_connection = get_db_connection(db_path)
+        if not self.db_connection:
+            raise Exception("Failed to connect to the database.")
         try:
             self.ig_client = IgClient(account_id)
             self.ig_utils = IgUtils(self.ig_client.client)
@@ -62,6 +66,9 @@ class IgGSHandling:
                     f"Spreadsheet '{spreadsheet_name}' not found in folder '{self.folder_name}'"
                 )
                 return False
+
+            # Set the spreadsheet_id in GoogleSheetsHandler
+            self.gs_handler.spreadsheet_id = self.spreadsheet_id
 
             # Now you can read the spreadsheet data
             spreadsheets = self.gs_handler.read_spreadsheet(
@@ -200,3 +207,58 @@ class IgGSHandling:
             logger.info(f"Updated {len(updates)} media paths")
         else:
             logger.info("No media paths to update")
+
+    def sync_google_sheet_with_db(self) -> None:
+        """
+        Syncs the Google Sheet with the SQLite database by uploading new entries
+        and updating the Google Sheet with generated content IDs.
+        """
+        # Fetch rows without content_id
+        rows = self.gs_handler.get_rows_without_content_id()
+
+        # Insert rows into the database and get content_ids
+        content_ids = []
+        for row in rows:
+            content_id = self.insert_into_db(row)
+            content_ids.append(content_id)
+
+        # Update Google Sheet with content_ids
+        self.gs_handler.update_content_ids(rows, content_ids)
+
+    def insert_into_db(self, row: dict) -> int:
+        """
+        Inserts a row into the SQLite database and returns the generated content_id.
+
+        Args:
+            row (dict): A dictionary representing a row from the Google Sheet.
+
+        Returns:
+            int: The generated content_id from the database.
+        """
+        print("INSERTING INTO DB", row, "\n")
+        cursor = self.db_connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO content (content_type, media_type, title, caption, hashtags, mentions, location_id, music_track_id, media_file_names, media_paths, link, publish_date, publish_time, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row.get("content_type"),
+                row.get("media_type"),
+                row.get("title"),
+                row.get("caption"),
+                row.get("hashtags"),
+                row.get("mentions"),
+                row.get("location_id"),  # Ensure this matches the table schema
+                row.get("music_track_id"),
+                row.get("media_file_names"),
+                row.get("media_paths"),
+                row.get("link"),
+                row.get("publish_date"),
+                row.get("publish_time"),
+                row.get("status"),
+            ),
+        )
+        self.db_connection.commit()
+        return cursor.lastrowid
+

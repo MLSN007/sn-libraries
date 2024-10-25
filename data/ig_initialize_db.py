@@ -7,7 +7,9 @@ def create_tables():
     data types, foreign key constraints, and indexing for optimization.
     """
     # -------------------------------------------------------------------------
-    conn = sqlite3.connect("JK_ig.db")  # ------------------------
+    conn = sqlite3.connect(
+        r"C:\Users\manue\Documents\GitHub007\sn-libraries\data\JK_ig.db"
+    )                         # Replace with your database name  # ------------------------
     # -------------------------------------------------------------------------
 
     cursor = conn.cursor()
@@ -58,6 +60,29 @@ def create_tables():
         )
     """
     )
+    
+    # Create the 'reels' table with foreign key constraint
+    cursor.execute(
+        """
+        CREATE TABLE reels (
+            reel_id INTEGER PRIMARY KEY, 
+            content_id INTEGER, 
+            caption TEXT,
+            timestamp TEXT,
+            media_url TEXT,
+            thumbnail_url TEXT,
+            location_pk INTEGER,
+            location_name TEXT,
+            like_count INTEGER,
+            comment_count INTEGER,
+            audio_track TEXT,
+            effects TEXT,  -- You might want to use a separate table for effects
+            duration INTEGER,
+            status TEXT,
+            FOREIGN KEY (content_id) REFERENCES content(content_id)
+        )
+        """
+    )
 
     # Create the 'stories' table with foreign key constraint
     cursor.execute(
@@ -101,6 +126,7 @@ def create_tables():
     # Create indexes
     cursor.execute("CREATE INDEX idx_posts_content_id ON posts (content_id)")
     cursor.execute("CREATE INDEX idx_stories_content_id ON stories (content_id)")
+    cursor.execute("CREATE INDEX idx_content_status ON content (status)")
     # ... add other indexes as needed ...
 
     conn.commit()

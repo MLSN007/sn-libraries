@@ -5,7 +5,9 @@ def print_table_data(table_name):
     Reads all data from the specified table and prints it in a formatted way.
     """
     # -------------------------------------------------------------------------
-    conn = sqlite3.connect("JK_ig.db")  # Replace with your database name
+    conn = sqlite3.connect(
+        r"C:\Users\manue\Documents\GitHub007\sn-libraries\data\JK_ig.db"
+    )  # Replace with your database name
     # -------------------------------------------------------------------------
     cursor = conn.cursor()
 
@@ -30,7 +32,8 @@ def print_table_data(table_name):
 
         # Print the data rows
         for row in rows:
-            print("|".join(str(value) for value in row))
+            print("  |  ".join(str(value) for value in row))
+            print("\n")
 
     except sqlite3.Error as e:
         print(f"An error occurred: {e}")

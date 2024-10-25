@@ -18,15 +18,13 @@ logging.getLogger("google_sheets_handler").setLevel(logging.DEBUG)
 
 def main():
     account_id = "JK"  # Replace with the actual account ID
-    logger.info(
-        f"Starting Instagram Google Sheets handling process for account: {account_id}"
-    )
+    logger.info("Starting Instagram Google Sheets handling process for account: %s", account_id)
 
     try:
         handler = IgGSHandling(account_id)
         logger.info("IgGSHandling instance created successfully")
     except Exception as e:
-        logger.error(f"Failed to create IgGSHandling instance: {str(e)}")
+        logger.error("Failed to create IgGSHandling instance: %s", str(e))
         return
 
     try:
@@ -36,29 +34,36 @@ def main():
             return
         logger.info("Authentication and setup successful")
     except Exception as e:
-        logger.error(f"Error during authentication and setup: {str(e)}")
+        logger.error("Error during authentication and setup: %s", str(e))
         return
 
-    try:
-        logger.info("Updating location IDs")
-        handler.update_location_ids()
-        logger.info("Location ID update complete")
-    except Exception as e:
-        logger.error(f"Error updating location IDs: {str(e)}")
+    # try:
+    #     logger.info("Updating location IDs")
+    #     handler.update_location_ids()
+    #     logger.info("Location ID update complete")
+    # except Exception as e:
+    #     logger.error("Error updating location IDs: %s", str(e))
+
+    # try:
+    #     logger.info("Updating music track IDs")
+    #     handler.update_music_track_ids()
+    #     logger.info("Music track ID update complete")
+    # except Exception as e:
+    #     logger.error("Error updating music track IDs: %s", str(e))
+
+    # try:
+    #     logger.info("Updating media paths")
+    #     handler.update_media_paths()
+    #     logger.info("Media path update complete")
+    # except Exception as e:
+    #     logger.error("Error updating media paths: %s", str(e))
 
     try:
-        logger.info("Updating music track IDs")
-        handler.update_music_track_ids()
-        logger.info("Music track ID update complete")
+        logger.info("Syncing Google Sheet with SQLite database")
+        handler.sync_google_sheet_with_db()
+        logger.info("Sync complete")
     except Exception as e:
-        logger.error(f"Error updating music track IDs: {str(e)}")
-
-    try:
-        logger.info("Updating media paths")
-        handler.update_media_paths()
-        logger.info("Media path update complete")
-    except Exception as e:
-        logger.error(f"Error updating media paths: {str(e)}")
+        logger.error("Error during sync: %s", str(e))
 
     logger.info("Instagram Google Sheets handling process completed")
 

@@ -30,6 +30,7 @@ from instagrapi.exceptions import (
     UserNotFound,
 )
 from ig_data import IgPostData
+import sqlite3
 
 
 logging.basicConfig(level=logging.INFO)
@@ -244,3 +245,22 @@ def correct_orientation(image_path: Path) -> None:
             logging.warning(f"No EXIF orientation data found in image: {image_path}")
     except (IOError, OSError) as e:
         logging.error(f"Error opening or processing image: {image_path}, Error: {e}")
+
+
+def get_db_connection(db_path: str) -> Optional[sqlite3.Connection]:
+    """
+    Establishes a connection to the SQLite database.
+
+    Args:
+        db_path (str): The path to the SQLite database file.
+
+    Returns:
+        Optional[sqlite3.Connection]: The database connection object, or None if an error occurs.
+    """
+    try:
+        print(f"Connecting to database at: {db_path}")
+        connection = sqlite3.connect(db_path)
+        return connection
+    except sqlite3.Error as e:
+        logger.error(f"Error connecting to database: {e}")
+        return None

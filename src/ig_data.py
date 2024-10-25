@@ -48,6 +48,54 @@ class IgPostData:
     album_media_urls: Optional[List[str]] = None  # List of media URLs in the album
 
 
+1. Revised IgReelData
+
+Python
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+from instagrapi.types import (
+    StoryMention,
+    StoryMedia,
+    StoryLink,
+    StoryHashtag,
+    StoryLocation,
+    StorySticker,
+    UserShort,
+    HttpUrl,
+)
+
+@dataclass
+class IgReelData:
+    """Represents an Instagram Reel with relevant data.
+
+    Attributes:
+        media_id (str): The unique identifier of the reel.
+        caption (str): The reel's caption, potentially including hashtags and mentions.
+        timestamp (datetime): The date and time the reel was created.
+        media_url (str): URL of the reel video.
+        thumbnail_url (str): URL of the reel's thumbnail image.
+        location_pk (int, optional): Location ID (primary key).
+        location_name (str, optional): Name of the location.
+        like_count (int): The number of likes (default: 0).
+        comment_count (int): The number of comments (default: 0).
+        audio_track (str, optional): Name of the audio track used in the reel.
+        effects (List[str], optional): List of effects used in the reel.
+        duration (int): Duration of the reel in seconds.
+    """
+
+    media_id: str
+    caption: str  # complete with hashtags and mentions
+    timestamp: datetime
+    media_url: str 
+    thumbnail_url: str
+    location_pk: Optional[int] = None
+    location_name: Optional[str] = None
+    like_count: int = 0
+    comment_count: int = 0
+    audio_track: Optional[str] = None
+    effects: Optional[List[str]] = field(default_factory=list)
+    duration: int = 0 
 @dataclass
 class IgStData:
     """Represents essential data for an Instagram story.

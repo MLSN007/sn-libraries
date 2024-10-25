@@ -47,17 +47,18 @@ class GoogleSheetsHandler:
         "https://www.googleapis.com/auth/documents",
     ]
 
-    def __init__(self, account_id: str, use_oauth: bool = False):
+    def __init__(self, account_id: str, spreadsheet_id: Optional[str] = None):
         """
         Initialize the GoogleSheetsHandler.
 
         Args:
             account_id (str): Identifier for the Google account to use.
-            use_oauth (bool): If True, use OAuth flow instead of config file.
+            spreadsheet_id (Optional[str]): The ID of the spreadsheet to use.
         """
 
         self.account_id = account_id
-        self.use_oauth = use_oauth
+        self.spreadsheet_id = spreadsheet_id
+        self.use_oauth = False
         self.config_path = self._get_config_path()
         self.creds: Optional[Credentials] = None
         self.sheets_service: Optional[Resource] = None
@@ -437,3 +438,58 @@ class GoogleSheetsHandler:
         except Exception as e:
             logger.error(f"Error checking permissions: {str(e)}")
             return False
+
+    def get_rows_without_content_id(self) -> list:
+        """
+        Fetches rows from the Google Sheet that do not have a content_id and have data in 'consecutive_input_#'.
+        
+        Returns:
+            list: A list of dictionaries representing rows without content_id.
+        """
+        try:
+            # Read the spreadsheet data
+            data = self.read_spreadsheet(self.spreadsheet_id, "A:S")
+            if not data:
+                logger.error("Failed to read spreadsheet data")
+                return []
+
+            header = data[0]
+            content_id_index = header.index("content_id")
+            consecutive_input_index = header.index("consecutive_input_#")
+
+            rows_without_content_id = []
+            for row in data[1:]:
+                if len(row) <= max(content_id_index, consecutive_input_index):
+                    logger.warning(f"Row is missing expected columns: {row}")
+                    continue
+                if row[consecutive_input_index].isdigit() and not row[content_id_index]:
+                    row_dict = {header[i]: row[i] if i < len(row) else None for i in range(len(header))}
+                    rows_without_content_id.append(row_dict)
+
+            return rows_without_content_id
+        except Exception as e:
+            logger.error(f"Error fetching rows without content_id: {e}")
+            return []
+
+    def update_content_ids(self, rows: list, content_ids: list) -> None:
+        """
+        Updates the Google Sheet with the provided content_ids.
+        
+        Args:
+            rows (list): A list of dictionaries representing rows to update.
+            content_ids (list): A list of content_ids to write back to the Google Sheet.
+        """
+        try:
+            updates = []
+            for row, content_id in zip(rows, content_ids):
+                row_index = row['row_index']  # Ensure you have a way to track the row index
+                updates.append({"range": f"C{row_index}", "values": [[content_id]]})
+
+            if updates:
+                self.batch_update(self.spreadsheet_id, updates)
+                logger.info(f"Updated {len(updates)} content IDs")
+        except Exception as e:
+            logger.error(f"Error updating content IDs: {e}")
+
+
+
