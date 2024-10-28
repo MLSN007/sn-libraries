@@ -336,28 +336,40 @@ class GoogleSheetsHandler:
             print(f"An error occurred while appending to spreadsheet: {error}")
             return None
 
-    def batch_update(self, spreadsheet_id: str, updates: List[Dict[str, Any]]) -> None:
+    def batch_update(self, spreadsheet_id: str, data: List[Dict[str, Any]]) -> bool:
         """
         Perform a batch update on the spreadsheet.
 
         Args:
-            spreadsheet_id (str): The ID of the spreadsheet to update.
-            updates (List[Dict[str, Any]]): A list of update operations to perform.
+            spreadsheet_id (str): The ID of the spreadsheet to update
+            data (List[Dict[str, Any]]): List of update operations, each containing 'range' and 'values'
 
-        Raises:
-            HttpError: If an error occurs during the API call.
+        Returns:
+            bool: True if successful, False otherwise
         """
         try:
-            body = {"valueInputOption": "USER_ENTERED", "data": updates}
-            self.sheets_service.spreadsheets().values().batchUpdate(
-                spreadsheetId=spreadsheet_id, body=body
+            body = {
+                'valueInputOption': 'USER_ENTERED',
+                'data': [
+                    {
+                        'range': item['range'],
+                        'values': item['values']
+                    }
+                    for item in data
+                ]
+            }
+
+            result = self.sheets_service.spreadsheets().values().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body=body
             ).execute()
-            logger.info(
-                f"Batch update completed successfully for {len(updates)} operations."
-            )
-        except HttpError as error:
-            logger.error(f"An error occurred during batch update: {error}")
-            raise
+
+            logger.info(f"Batch update successful: {result.get('totalUpdatedCells')} cells updated")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error performing batch update: {e}")
+            return False
 
     def find_file_id(self, folder_id: str, file_name: str) -> Optional[str]:
         """
@@ -458,12 +470,13 @@ class GoogleSheetsHandler:
             consecutive_input_index = header.index("consecutive_input_#")
 
             rows_without_content_id = []
-            for row in data[1:]:
+            for row_idx, row in enumerate(data[1:], start=2):  # Start from 2 to account for header row
                 if len(row) <= max(content_id_index, consecutive_input_index):
-                    logger.warning(f"Row is missing expected columns: {row}")
+                    logger.warning(f"Row {row_idx} is missing expected columns: {row}")
                     continue
                 if row[consecutive_input_index].isdigit() and not row[content_id_index]:
                     row_dict = {header[i]: row[i] if i < len(row) else None for i in range(len(header))}
+                    row_dict['row_index'] = row_idx  # Add the actual row number from Google Sheet
                     rows_without_content_id.append(row_dict)
 
             return rows_without_content_id
@@ -490,6 +503,8 @@ class GoogleSheetsHandler:
                 logger.info(f"Updated {len(updates)} content IDs")
         except Exception as e:
             logger.error(f"Error updating content IDs: {e}")
+
+
 
 
 

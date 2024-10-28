@@ -55,8 +55,19 @@ class IgContentPublisher:
         self.post_manager = IgPostManager(self.ig_client)
         self.gs_handler = GoogleSheetsHandler(account_id)
         self.gs_handler.authenticate()
-        # Cast drive_service to Resource type to fix linter error
-        self.drive_service = cast(Resource, self.gs_handler.drive_service)
+        
+        # Initialize Google Sheet setup
+        folder_name = "ig JK tests"  # Make this configurable if needed
+        self.folder_id = self.gs_handler.get_folder_id(folder_name)
+        if self.folder_id:
+            spreadsheet_name = f"{account_id} IG input table"
+            self.gs_handler.spreadsheet_id = self.gs_handler.find_file_id(
+                self.folder_id, spreadsheet_name
+            )
+            if not self.gs_handler.spreadsheet_id:
+                logger.error(f"Could not find spreadsheet: {spreadsheet_name}")
+        else:
+            logger.error(f"Could not find folder: {folder_name}")
 
     def get_pending_content(self) -> List[Dict[str, Any]]:
         """
@@ -326,77 +337,90 @@ class IgContentPublisher:
                 except Exception as e:
                     logger.warning(f"Error cleaning up temporary file {temp_file}: {e}")
 
-    def update_content_status(
-        self, content_id: int, status: str, result: Optional[Media] = None
-    ) -> None:
-        """
-        Update the status of content in the database.
-
-        Args:
-            content_id (int): The ID of the content
-            status (str): New status ('published' or 'failed')
-            result (Optional[Media]): Result from Instagram API if published successfully
-        """
+    def update_content_status(self, content_id: int, status: str, result: Optional[Media] = None) -> None:
+        """Update the status of content in both database and Google Sheet."""
         try:
+            logger.info(f"Starting status update for content_id {content_id} to {status}")
+            
+            # First, get the content data including gs_row_number
             with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM content WHERE content_id = ?",
+                    (content_id,)
+                )
+                content = dict(cursor.fetchone())
+                logger.info(f"Retrieved content data: {content}")
 
-                # Update content table
+                # Update database status
                 cursor.execute(
                     "UPDATE content SET status = ? WHERE content_id = ?",
                     (status, content_id),
                 )
+                logger.info(f"Updated content status in database to: {status}")
 
                 # If published successfully, update corresponding content-specific table
                 if status == "published" and result:
                     if isinstance(result, Media):
                         if result.media_type == 1:  # Photo
+                            logger.info("Updating posts table for photo content")
                             self._update_posts_table(cursor, content_id, result)
-                        elif result.media_type == 2 and result.product_type == "clips":  # Reel
-                            self._update_reels_table(cursor, content_id, result)
+                        elif result.media_type == 2:
+                            if result.product_type == "clips":  # Reel
+                                logger.info("Updating reels table for reel content")
+                                self._update_reels_table(cursor, content_id, result)
+                            else:  # Video post
+                                logger.info("Updating posts table for video content")
+                                self._update_posts_table(cursor, content_id, result)
 
                 conn.commit()
+                logger.info("Database updates committed successfully")
+
+            # Update Google Sheet status
+            self.update_google_sheet_status(content, status)
+            logger.info("Completed status update process")
 
         except sqlite3.Error as e:
             logger.error(f"Database error updating status: {e}")
+        except Exception as e:
+            logger.error(f"Error updating status: {e}")
+            logger.error(traceback.format_exc())
 
     def _update_posts_table(
         self, cursor: sqlite3.Cursor, content_id: int, result: Media
     ) -> None:
         """Update the posts table with the API response data."""
-        cursor.execute(
-            """
-            INSERT INTO posts (
-                content_id, media_type, product_type, caption, timestamp,
-                media_url, location_pk, location_name, like_count, comment_count,
-                is_album, album_media_ids, album_media_urls, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                content_id,  # This is the foreign key referencing content.content_id
-                result.media_type,
-                result.product_type,
-                result.caption_text,
-                result.taken_at.isoformat(),
-                result.thumbnail_url,
-                result.location.pk if result.location else None,
-                result.location.name if result.location else None,
-                result.like_count,
-                result.comment_count,
-                bool(result.resources),
+        try:
+            cursor.execute(
+                """
+                INSERT INTO posts (
+                    content_id, media_type, product_type, caption, timestamp,
+                    media_url, location_pk, location_name, like_count, comment_count,
+                    is_album, album_media_ids, album_media_urls, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (
-                    ",".join(str(r.pk) for r in result.resources)
-                    if result.resources
-                    else None
-                ),
-                (
-                    ",".join(r.thumbnail_url for r in result.resources)
-                    if result.resources
-                    else None
-                ),
-                "active",
-            ),
-        )
+                    content_id,
+                    result.media_type,
+                    result.product_type,
+                    result.caption_text,
+                    result.taken_at.isoformat(),
+                    result.thumbnail_url,
+                    result.location.pk if result.location else None,
+                    result.location.name if result.location else None,
+                    result.like_count,
+                    result.comment_count,
+                    bool(result.resources),
+                    ",".join(str(r.pk) for r in result.resources) if result.resources else None,
+                    ",".join(r.thumbnail_url for r in result.resources) if result.resources else None,
+                    "active"
+                )
+            )
+            logger.info(f"Successfully updated posts table for content_id: {content_id}")
+        except sqlite3.Error as e:
+            logger.error(f"Error updating posts table: {e}")
+            raise
 
     def _update_reels_table(
         self, cursor: sqlite3.Cursor, content_id: int, result: Media
@@ -439,5 +463,59 @@ class IgContentPublisher:
                     logger.error(f"Failed to publish content {content['content_id']}")
             except Exception as e:
                 logger.error(f"Error processing content {content['content_id']}: {e}")
+
+    def update_google_sheet_status(self, content: Dict[str, Any], status: str) -> None:
+        """
+        Update the status in Google Sheet for a published/failed content.
+
+        Args:
+            content (Dict[str, Any]): The content data including gs_row_number
+            status (str): The status to update ('published' or 'failed')
+        """
+        try:
+            if not content.get('gs_row_number'):
+                logger.warning(f"No Google Sheet row number for content_id: {content['content_id']}")
+                return
+
+            # Get the spreadsheet ID from the GoogleSheetsHandler
+            spreadsheet_id = self.gs_handler.spreadsheet_id
+            if not spreadsheet_id:
+                logger.error("No spreadsheet ID configured")
+                return
+
+            # Prepare the update data
+            row_number = content['gs_row_number']
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Update status column (assuming it's column N)
+            status_range = f"'Ig Origin Data'!N{row_number}"
+            status_value = [["Y" if status == "published" else "Failed"]]
+            
+            # Update timestamp column (assuming it's column O)
+            timestamp_range = f"'Ig Origin Data'!O{row_number}"
+            timestamp_value = [[current_time]]
+
+            # Batch update the sheet
+            batch_data = [
+                {
+                    "range": status_range,
+                    "values": status_value
+                },
+                {
+                    "range": timestamp_range,
+                    "values": timestamp_value
+                }
+            ]
+
+            result = self.gs_handler.batch_update(spreadsheet_id, batch_data)
+            if result:
+                logger.info(f"Updated Google Sheet status for content_id {content['content_id']} to {status}")
+            else:
+                logger.error(f"Failed to update Google Sheet for content_id {content['content_id']}")
+
+        except Exception as e:
+            logger.error(f"Error updating Google Sheet status: {e}")
+            logger.error(traceback.format_exc())
+
 
 

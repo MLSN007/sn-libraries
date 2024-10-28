@@ -17,7 +17,7 @@ def create_tables():
     # Create the 'content' table
     cursor.execute(
         """
-        CREATE TABLE content (
+        CREATE TABLE IF NOT EXISTS content (
             content_id INTEGER PRIMARY KEY AUTOINCREMENT,
             content_type TEXT,
             media_type TEXT,
@@ -32,15 +32,16 @@ def create_tables():
             link TEXT,
             publish_date TEXT,
             publish_time TEXT,
-            status TEXT
+            status TEXT,
+            gs_row_number INTEGER
         )
     """
     )
 
-    # Create the 'posts' table with foreign key constraint
+    # Create the 'posts' table
     cursor.execute(
         """
-        CREATE TABLE posts (
+        CREATE TABLE IF NOT EXISTS posts (
             post_id INTEGER PRIMARY KEY,
             content_id INTEGER,
             media_type INTEGER,
@@ -61,12 +62,12 @@ def create_tables():
     """
     )
     
-    # Create the 'reels' table with foreign key constraint
+    # Create the 'reels' table
     cursor.execute(
         """
-        CREATE TABLE reels (
-            reel_id INTEGER PRIMARY KEY, 
-            content_id INTEGER, 
+        CREATE TABLE IF NOT EXISTS reels (
+            reel_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content_id INTEGER,
             caption TEXT,
             timestamp TEXT,
             media_url TEXT,
@@ -76,18 +77,18 @@ def create_tables():
             like_count INTEGER,
             comment_count INTEGER,
             audio_track TEXT,
-            effects TEXT,  -- You might want to use a separate table for effects
+            effects TEXT,
             duration INTEGER,
             status TEXT,
             FOREIGN KEY (content_id) REFERENCES content(content_id)
         )
-        """
+    """
     )
 
-    # Create the 'stories' table with foreign key constraint
+    # Create the 'stories' table
     cursor.execute(
         """
-        CREATE TABLE stories (
+        CREATE TABLE IF NOT EXISTS stories (
             pk INTEGER PRIMARY KEY,
             story_id TEXT,
             content_id INTEGER,
@@ -104,12 +105,12 @@ def create_tables():
     """
     )
 
-    # Create the 'comments' table with foreign key constraint
+    # Create the 'comments' table
     cursor.execute(
         """
-        CREATE TABLE comments (
+        CREATE TABLE IF NOT EXISTS comments (
             comment_id INTEGER PRIMARY KEY,
-            post_id INTEGER,  -- References the post the comment belongs to
+            post_id INTEGER,
             user_id INTEGER,
             comment_text TEXT,
             timestamp TEXT,
@@ -118,17 +119,16 @@ def create_tables():
             user_name TEXT,
             user_full_name TEXT,
             is_business_account INTEGER,
-            FOREIGN KEY (post_id) REFERENCES posts(post_id)  -- Foreign key constraint
+            FOREIGN KEY (post_id) REFERENCES posts(post_id)
         )
     """
     )
 
     # Create indexes
-    cursor.execute("CREATE INDEX idx_posts_content_id ON posts (content_id)")
-    cursor.execute("CREATE INDEX idx_reels_content_id ON reels (content_id)")
-    cursor.execute("CREATE INDEX idx_stories_content_id ON stories (content_id)")
-    cursor.execute("CREATE INDEX idx_content_status ON content (status)")
-    # ... add other indexes as needed ...
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_posts_content_id ON posts (content_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_reels_content_id ON reels (content_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stories_content_id ON stories (content_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_status ON content (status)")
 
     conn.commit()
     conn.close()

@@ -1,49 +1,44 @@
+"""
+Print the contents of all tables in the Instagram database.
+"""
+
 import sqlite3
+import os
 
-def print_table_data(table_name):
+def print_table_data(table_name: str) -> None:
     """
-    Reads all data from the specified table and prints it in a formatted way.
-    """
-    # -------------------------------------------------------------------------
-    conn = sqlite3.connect(
-        r"C:\Users\manue\Documents\GitHub007\sn-libraries\data\JK_ig.db"
-    )  # Replace with your database name
-    # -------------------------------------------------------------------------
-    cursor = conn.cursor()
+    Print all data from a specified table.
 
+    Args:
+        table_name (str): Name of the table to print
+    """
     try:
-        # Execute a SELECT query to fetch all rows from the table
-        cursor.execute(f'SELECT * FROM {table_name}')
+        conn = sqlite3.connect(r"C:\Users\manue\Documents\GitHub007\sn-libraries\data\JK_ig.db")
+        cursor = conn.cursor()
 
-        # Fetch all results
-        rows = cursor.fetchall()
-
-        # Print the table name
+        # Get column names
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [column[1] for column in cursor.fetchall()]
         print(f"\nTable: {table_name}")
+        print("|".join(columns))
 
-        # If there are no rows, print a message
-        if not rows:
+        # Get and print data
+        cursor.execute(f"SELECT * FROM {table_name}")
+        rows = cursor.fetchall()
+        if rows:
+            for row in rows:
+                print("  |  ".join(str(item) for item in row))
+        else:
             print("No data found in this table.")
-            return
 
-        # Get the column names
-        column_names = [description[0] for description in cursor.description]
-        print("|".join(column_names))  # Print column names as headers
-
-        # Print the data rows
-        for row in rows:
-            print("  |  ".join(str(value) for value in row))
-            print("\n")
-
-    except sqlite3.Error as e:
-        print(f"An error occurred: {e}")
-
-    finally:
         conn.close()
 
+    except sqlite3.Error as e:
+        print(f"Error accessing table {table_name}: {e}")
+
 if __name__ == "__main__":
-    # List of table names
-    tables = ["content", "posts", "stories", "comments"]
+    # List of table names - Add 'reels' to the list
+    tables = ["content", "posts", "reels", "stories", "comments"]
 
     # Print data for each table
     for table in tables:

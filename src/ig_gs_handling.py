@@ -239,8 +239,12 @@ class IgGSHandling:
         cursor = self.db_connection.cursor()
         cursor.execute(
             """
-            INSERT INTO content (content_type, media_type, title, caption, hashtags, mentions, location_id, music_track_id, media_file_names, media_paths, link, publish_date, publish_time, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO content (
+                content_type, media_type, title, caption, hashtags, mentions, 
+                location_id, music_track_id, media_file_names, media_paths, 
+                link, publish_date, publish_time, status, gs_row_number
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row.get("content_type"),
@@ -249,14 +253,15 @@ class IgGSHandling:
                 row.get("caption"),
                 row.get("hashtags"),
                 row.get("mentions"),
-                row.get("location_id"),  # Ensure this matches the table schema
+                row.get("location_id"),
                 row.get("music_track_id"),
                 row.get("media_file_names"),
                 row.get("media_paths"),
                 row.get("link"),
                 row.get("publish_date"),
                 row.get("publish_time"),
-                row.get("status"),
+                "pending",  # Set initial status
+                row.get("row_index"),  # Add the Google Sheet row number
             ),
         )
         self.db_connection.commit()
