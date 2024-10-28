@@ -216,9 +216,9 @@ class IgContentPublisher:
         try:
             # Validate session before publishing
             if not self.ig_client.validate_session():
-                logger.error("Failed to validate Instagram session")
+                logger.error("❌ Instagram session is invalid. Stopping all publishing attempts.")
                 self.update_content_status(content["content_id"], "failed")
-                return False
+                return False  # Return immediately if session is invalid
 
             # Check for required dependencies for video content
             if content["media_type"] == "video":
@@ -439,4 +439,5 @@ class IgContentPublisher:
                     logger.error(f"Failed to publish content {content['content_id']}")
             except Exception as e:
                 logger.error(f"Error processing content {content['content_id']}: {e}")
+
 

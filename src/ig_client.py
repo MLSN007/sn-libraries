@@ -98,26 +98,46 @@ class IgClient:
             logger.error(f"An error occurred fetching user ID for {username}: {e}")
             raise
 
-    def validate_session(self) -> bool:
+    def reset_session(self) -> bool:
         """
-        Validate the current session and relogin if necessary.
-
+        Reset the session by removing existing session file and performing a fresh login.
+        
         Returns:
-            bool: True if session is valid or relogin successful, False otherwise
+            bool: True if reset and login successful, False otherwise
         """
         try:
-            # Try to perform a simple operation to test session
-            logger.info("Validating Instagram session...")
-            self.client.account_info()
-            logger.info("Session is valid")
+            logger.info("Resetting Instagram session...")
+            if os.path.exists(self.session_file):
+                os.remove(self.session_file)
+                logger.info("Removed existing session file")
+            
+            self.client = Client()  # Create new client instance
+            self.login()  # Perform fresh login
+            logger.info("Successfully reset session and performed fresh login")
             return True
         except Exception as e:
-            logger.warning(f"Session validation failed: {e}")
+            logger.error(f"Failed to reset session: {e}")
+            return False
+
+    def validate_session(self) -> bool:
+        """Validate the current session and relogin if necessary."""
+        try:
+            logger.info("Validating Instagram session...")
+            self.client.account_info()
+            logger.info("✅ Session is valid")
+            return True
+        except Exception as e:
+            logger.warning(f"❌ Session validation failed: {e}")
             try:
-                logger.info("Attempting to relogin...")
-                self.login()
-                logger.info("Relogin successful")
-                return True
+                logger.info("Attempting to reset session and perform fresh login...")
+                if self.reset_session():
+                    # Verify the new session
+                    self.client.account_info()
+                    logger.info("✅ New session is valid")
+                    return True
+                else:
+                    logger.error("❌ Session reset failed")
+                    return False
             except Exception as e:
-                logger.error(f"Relogin failed: {e}")
+                logger.error(f"❌ Login failed after session reset: {e}")
                 return False

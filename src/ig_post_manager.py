@@ -211,29 +211,10 @@ class IgPostManager:
         logger.error(f"Failed to upload video after {self.MAX_RETRIES} retries.")
         raise Exception(f"Failed to upload video after {self.MAX_RETRIES} retries")
 
-    def upload_album(self,
-                     paths: List[str], caption: str = "", location: Location = None
-                     ) -> List[IgPostData]:
-        """
-        Uploads an album to Instagram.
-
-        Args:
-            (file_path): Path to the media file.
-            caption (str, optional): Caption for the post (default: "").
-            location (Location, optional): Location object for tagging (default: None).
-
-        Returns:
-            IgPostData: An IgPostData object representing the uploaded media.
-
-        Raises:
-            FileNotFoundError: If the media file is not found.
-            ValueError: If the file format is not supported.
-            MediaError: If there's an error during the upload process.
-            ClientError: If there's a general Instagrapi client error.
-        """
-
+    def upload_album(self, paths: List[str], caption: str = "", location: Location = None) -> List[IgPostData]:
+        """Uploads an album to Instagram."""
         # File existence and extension validation
-        valid_image_extensions = [".jpg"]
+        valid_image_extensions = [".jpg", ".jpeg", ".png", ".webp"]  # Added more supported formats
         valid_video_extensions = [".mp4"]
 
         for path in paths:
@@ -243,7 +224,7 @@ class IgPostManager:
             file_ext = os.path.splitext(path)[1].lower()
             if file_ext not in valid_image_extensions + valid_video_extensions:
                 raise ValueError(
-                    f"Invalid file format: {path}. Only JPG/JPEG/PNG/WEBP/MP4 files are supported in albums."
+                    f"Invalid file format: {path}. Supported formats: {', '.join(valid_image_extensions + valid_video_extensions)}"
                 )
 
         retries = 0
@@ -280,62 +261,45 @@ class IgPostManager:
         logger.error(f"Failed to upload album after {self.MAX_RETRIES} retries.")
         raise e
 
-    def upload_reel(self,
-                    video_path: str, caption: str = "", location: Location = None
-                    ) -> IgPostData:
-        """
-        Uploads a reel to Instagram.
-
-        Args:
-            (file_path): Path to the media file.
-            caption (str, optional): Caption for the post (default: "").
-            location (Location, optional): Location object for tagging (default: None).
-
-        Returns:
-            IgPostData: An IgPostData object representing the uploaded media.
-
-        Raises:
-            FileNotFoundError: If the media file is not found.
-            ValueError: If the file format is not supported.
-            MediaError: If there's an error during the upload process.
-            ClientError: If there's a general Instagrapi client error.
-        """
-
-        # Check if file exists
-        if not os.path.isfile(video_path):
-            raise FileNotFoundError(f"Video file not found: {video_path}")
-
-        # File extension validation
-        valid_extensions = [".mp4"]
-        if not video_path.lower().endswith(tuple(valid_extensions)):
-            raise ValueError(
-                "Invalid file format. Only MP4 files are supported for reels."
-            )
-
+    def upload_reel(self, video_path: str, caption: str = "", location: Location = None) -> Optional[IgPostData]:
+        """Uploads a reel to Instagram."""
+        last_exception = None  # Track the last exception
+        
         retries = 0
         while retries < self.MAX_RETRIES:
             try:
+                extra_data = {}
+                if location:
+                    logger.info(f"Adding location data: {location.pk} - {location.name}")
+                    extra_data["location"] = self.client.location_build(location)
 
-                media = self.client.clip_upload(video_path, caption=caption, location=location)
-                print("reel outcome: ---------------------------------------------------------------------------------")
-                print(media)
+                logger.info("Initiating reel upload to Instagram...")
+                # Add delay before upload attempt
+                time.sleep(self.RETRY_DELAY)
+                
+                media = self.client.clip_upload(
+                    video_path, caption=caption, extra_data=extra_data
+                )
+                logger.info(f"Reel upload successful. Media ID: {media.id}")
 
-                # Create IgPostData object from the uploaded reel
+                # Create IgPostData object
                 ig_reel_post = IgPostData(
                     media_id=media.id,
                     media_type=media.media_type,
+                    product_type=media.product_type,
                     caption=caption,
                     timestamp=media.taken_at,
                     media_url=media.thumbnail_url,
                     location_pk=location.pk if location else None,
                     location_name=location.name if location else None,
                     like_count=media.like_count,
-                    comment_count=media.comment_count,
+                    comment_count=media.comment_count
                 )
 
                 return ig_reel_post
 
             except (ClientError, MediaError) as e:
+                last_exception = e  # Store the exception
                 logger.warning(
                     f"Error uploading reel (attempt {retries + 1}): {e}. Retrying..."
                 )
@@ -343,8 +307,10 @@ class IgPostManager:
                 time.sleep(self.RETRY_DELAY * retries)
 
         logger.error(f"Failed to upload reel after {self.MAX_RETRIES} retries.")
-        raise e  # Raise the final exception after retries are exhausted
-
+        if last_exception:
+            raise last_exception
+        else:
+            raise Exception(f"Failed to upload reel after {self.MAX_RETRIES} retries")
 
     def upload_reel_with_music(self,
                                 path: str,
@@ -422,6 +388,7 @@ class IgPostManager:
             f"Failed to upload reel with music after {self.MAX_RETRIES} retries."
         )
         raise e  # Raise the final exception after retries are exhausted
+
 
 
 
