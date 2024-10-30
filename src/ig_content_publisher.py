@@ -24,7 +24,10 @@ from ig_client import IgClient
 from ig_post_manager import IgPostManager
 from ig_utils import IgUtils
 from google_sheets_handler import GoogleSheetsHandler
-from instagrapi.types import Location, Media
+from instagrapi.types import (
+    Media, Location, StoryMention, StoryLink, StoryHashtag, 
+    UserShort, Hashtag
+)
 
 logger = logging.getLogger(__name__)
 
@@ -565,23 +568,23 @@ class IgContentPublisher:
                 )
             else:
                 logger.info(f"Inserting new reel record for content_id: {content_id}")
-        cursor.execute(
-            """
-            INSERT INTO reels (
-                content_id, caption, timestamp, media_url, thumbnail_url,
-                location_pk, location_name, like_count, comment_count, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
+                cursor.execute(
+                    """
+                    INSERT INTO reels (
+                        content_id, caption, timestamp, media_url, thumbnail_url,
+                        location_pk, location_name, like_count, comment_count, status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
                         content_id,
-                result.caption_text,
-                result.taken_at.isoformat(),
-                result.video_url,
-                result.thumbnail_url,
-                result.location.pk if result.location else None,
-                result.location.name if result.location else None,
-                result.like_count,
-                result.comment_count,
+                        result.caption_text,
+                        result.taken_at.isoformat(),
+                        result.video_url,
+                        result.thumbnail_url,
+                        result.location.pk if result.location else None,
+                        result.location.name if result.location else None,
+                        result.like_count,
+                        result.comment_count,
                         "active"
                     )
                 )
@@ -647,18 +650,10 @@ class IgContentPublisher:
     def publish_story(self, content: Dict[str, Any]) -> Optional[Media]:
         """
         Publish a story to Instagram.
-
-        Args:
-            content (Dict[str, Any]): Content data from database
-
-        Returns:
-            Optional[Media]: The published story media object if successful, None otherwise
         """
         try:
             # Get media file
-            media_paths = (
-                content["media_paths"].split(",") if content["media_paths"] else []
-            )
+            media_paths = content["media_paths"].split(",") if content["media_paths"] else []
             if not media_paths:
                 raise ValueError("No media file provided for story")
 
@@ -666,64 +661,81 @@ class IgContentPublisher:
             if not temp_file:
                 raise ValueError(f"Failed to retrieve media file")
 
-            # Prepare caption and mentions
-            caption = content["caption"] or ""
-            mentions = []
+            # Prepare mentions - Fixed format
+            story_mentions = []
             if content["mentions"]:
                 for mention in content["mentions"].split():
                     username = mention.strip("@")
                     user_id = self.ig_client.get_user_id(username)
                     if user_id:
-                        mentions.append(
-                            {
-                                "user_id": user_id,
-                                "x": 0.5,  # Center of story
-                                "y": 0.5,
-                                "width": 0.5,
-                                "height": 0.1,
-                            }
-                        )
+                        mention_dict = {
+                            "user_id": str(user_id),  # Convert to string
+                            "username": username,  # Include username
+                            "x": 0.5,
+                            "y": 0.5,
+                            "width": 0.5,
+                            "height": 0.1
+                        }
+                        story_mentions.append(mention_dict)
 
-            # Prepare hashtags
-            hashtags = []
+            # Prepare hashtags - Fixed format
+            story_hashtags = []
             if content["hashtags"]:
-                hashtags = [tag.strip("#") for tag in content["hashtags"].split()]
+                for idx, tag in enumerate(content["hashtags"].split()):
+                    clean_tag = tag.strip("#")
+                    hashtag_dict = {
+                        "hashtag": clean_tag,
+                        "x": 0.5,
+                        "y": 0.3 + (idx * 0.1),
+                        "width": 0.5,
+                        "height": 0.1
+                    }
+                    story_hashtags.append(hashtag_dict)
 
-            # Prepare location
+            # Prepare location - Fixed format
             location = None
             if content["location_id"]:
-                location = Location(
-                    pk=content["location_id"], name=content.get("location_name", "")
-                )
+                location = {
+                    "pk": str(content["location_id"]),
+                    "name": content.get("location_name", ""),
+                    "address": "",
+                    "lat": 0.0,
+                    "lng": 0.0
+                }
 
-            # Prepare link if available
-            links = []
+            # Prepare links - Fixed format
+            story_links = []
             if content.get("link"):
-                links.append({"webUri": content["link"]})
+                link_dict = {
+                    "webUri": content["link"],
+                    "x": 0.5,
+                    "y": 0.9,
+                    "width": 0.5,
+                    "height": 0.1
+                }
+                story_links.append(link_dict)
 
             # Publish story based on media type
             if content["media_type"] == "photo":
                 result = self.post_manager.upload_story_photo(
                     temp_file,
-                    caption=caption,
-                    mentions=mentions,
-                    hashtags=hashtags,
+                    caption=content["caption"],
+                    mentions=story_mentions,
+                    hashtags=story_hashtags,
                     location=location,
-                    links=links,
+                    links=story_links
                 )
             elif content["media_type"] == "video":
                 result = self.post_manager.upload_story_video(
                     temp_file,
-                    caption=caption,
-                    mentions=mentions,
-                    hashtags=hashtags,
+                    caption=content["caption"],
+                    mentions=story_mentions,
+                    hashtags=story_hashtags,
                     location=location,
-                    links=links,
+                    links=story_links
                 )
             else:
-                raise ValueError(
-                    f"Unsupported media type for story: {content['media_type']}"
-                )
+                raise ValueError(f"Unsupported media type for story: {content['media_type']}")
 
             return result
 
