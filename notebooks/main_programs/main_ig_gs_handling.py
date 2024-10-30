@@ -17,7 +17,9 @@ logging.getLogger("google_sheets_handler").setLevel(logging.DEBUG)
 
 
 def main():
+    # -------------------------------------------------------------------------
     account_id = "JK"  # Replace with the actual account ID
+    # -------------------------------------------------------------------------
     logger.info(
         "Starting Instagram Google Sheets handling process for account: %s", account_id
     )
@@ -52,7 +54,6 @@ def main():
     #     logger.info("Music track ID update complete")
     # except Exception as e:
     #     logger.error("Error updating music track IDs: %s", str(e))
-
     # try:
     #     logger.info("Updating media paths")
     #     handler.update_media_paths()

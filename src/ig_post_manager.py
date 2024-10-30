@@ -17,9 +17,10 @@ import time
 import datetime
 import logging
 
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Dict, Union
+from pathlib import Path
 from instagrapi.exceptions import ClientError, MediaError
-from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker, Media, Track
+from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker, Media, Track, UserShort
 from ig_client import IgClient
 from ig_utils import IgUtils
 from ig_data import IgPostData
@@ -388,6 +389,186 @@ class IgPostManager:
             f"Failed to upload reel with music after {self.MAX_RETRIES} retries."
         )
         raise e  # Raise the final exception after retries are exhausted
+
+    def upload_story_photo(
+        self,
+        photo_path: str,
+        caption: Optional[str] = None,
+        mentions: Optional[List[Dict[str, Any]]] = None,
+        hashtags: Optional[List[str]] = None,
+        location: Optional[Location] = None,
+        links: Optional[List[Dict[str, str]]] = None
+    ) -> Optional[Media]:
+        """
+        Upload a photo story to Instagram.
+
+        Args:
+            photo_path (str): Path to the photo file
+            caption (Optional[str]): Story caption
+            mentions (Optional[List[Dict[str, Any]]]): List of user mentions with positions
+            hashtags (Optional[List[str]]): List of hashtags to include
+            location (Optional[Location]): Location to tag in the story
+            links (Optional[List[Dict[str, str]]]): List of links to add to the story
+
+        Returns:
+            Optional[Media]: The uploaded story media object if successful, None otherwise
+        """
+        try:
+            # Prepare story mentions
+            story_mentions = []
+            if mentions:
+                for mention in mentions:
+                    user = UserShort(
+                        pk=mention['user_id'],
+                        username="",  # Will be filled by Instagram
+                        full_name=""
+                    )
+                    story_mentions.append(
+                        StoryMention(
+                            user=user,
+                            x=mention['x'],
+                            y=mention['y'],
+                            width=mention['width'],
+                            height=mention['height']
+                        )
+                    )
+
+            # Prepare story hashtags
+            story_hashtags = []
+            if hashtags:
+                for idx, tag in enumerate(hashtags):
+                    # Position hashtags vertically
+                    y_position = 0.3 + (idx * 0.1)  # Adjust spacing as needed
+                    story_hashtags.append(
+                        StoryHashtag(
+                            hashtag=tag,
+                            x=0.5,  # Center horizontally
+                            y=min(y_position, 0.8),  # Keep within bounds
+                            width=0.4,
+                            height=0.06
+                        )
+                    )
+
+            # Prepare story links
+            story_links = []
+            if links:
+                for idx, link in enumerate(links):
+                    story_links.append(
+                        StoryLink(
+                            webUri=link['webUri'],
+                            x=0.5,
+                            y=0.9,  # Bottom of story
+                            width=0.4,
+                            height=0.06
+                        )
+                    )
+
+            # Upload the story
+            result = self.client.photo_upload_to_story(
+                photo_path,
+                caption=caption,
+                mentions=story_mentions,
+                hashtags=story_hashtags,
+                links=story_links,
+                location=location
+            )
+
+            logger.info(f"Successfully uploaded photo story")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error uploading photo story: {str(e)}")
+            return None
+
+    def upload_story_video(
+        self,
+        video_path: str,
+        caption: Optional[str] = None,
+        mentions: Optional[List[Dict[str, Any]]] = None,
+        hashtags: Optional[List[str]] = None,
+        location: Optional[Location] = None,
+        links: Optional[List[Dict[str, str]]] = None
+    ) -> Optional[Media]:
+        """
+        Upload a video story to Instagram.
+
+        Args:
+            video_path (str): Path to the video file
+            caption (Optional[str]): Story caption
+            mentions (Optional[List[Dict[str, Any]]]): List of user mentions with positions
+            hashtags (Optional[List[str]]): List of hashtags to include
+            location (Optional[Location]): Location to tag in the story
+            links (Optional[List[Dict[str, str]]]): List of links to add to the story
+
+        Returns:
+            Optional[Media]: The uploaded story media object if successful, None otherwise
+        """
+        try:
+            # Prepare story mentions
+            story_mentions = []
+            if mentions:
+                for mention in mentions:
+                    user = UserShort(
+                        pk=mention['user_id'],
+                        username="",  # Will be filled by Instagram
+                        full_name=""
+                    )
+                    story_mentions.append(
+                        StoryMention(
+                            user=user,
+                            x=mention['x'],
+                            y=mention['y'],
+                            width=mention['width'],
+                            height=mention['height']
+                        )
+                    )
+
+            # Prepare story hashtags
+            story_hashtags = []
+            if hashtags:
+                for idx, tag in enumerate(hashtags):
+                    # Position hashtags vertically
+                    y_position = 0.3 + (idx * 0.1)  # Adjust spacing as needed
+                    story_hashtags.append(
+                        StoryHashtag(
+                            hashtag=tag,
+                            x=0.5,  # Center horizontally
+                            y=min(y_position, 0.8),  # Keep within bounds
+                            width=0.4,
+                            height=0.06
+                        )
+                    )
+
+            # Prepare story links
+            story_links = []
+            if links:
+                for idx, link in enumerate(links):
+                    story_links.append(
+                        StoryLink(
+                            webUri=link['webUri'],
+                            x=0.5,
+                            y=0.9,  # Bottom of story
+                            width=0.4,
+                            height=0.06
+                        )
+                    )
+
+            # Upload the story
+            result = self.client.video_upload_to_story(
+                video_path,
+                caption=caption,
+                mentions=story_mentions,
+                hashtags=story_hashtags,
+                links=story_links,
+                location=location
+            )
+
+            logger.info(f"Successfully uploaded video story")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error uploading video story: {str(e)}")
+            return None
 
 
 

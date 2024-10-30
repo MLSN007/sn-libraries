@@ -55,7 +55,10 @@ class IgContentPublisher:
         self.post_manager = IgPostManager(self.ig_client)
         self.gs_handler = GoogleSheetsHandler(account_id)
         self.gs_handler.authenticate()
-        
+
+        # Initialize Google Sheet and Drive services
+        self.drive_service = self.gs_handler.drive_service
+
         # Initialize Google Sheet setup
         folder_name = "ig JK tests"  # Make this configurable if needed
         self.folder_id = self.gs_handler.get_folder_id(folder_name)
@@ -172,45 +175,43 @@ class IgContentPublisher:
             return []
 
     def get_media_content(self, file_id: str) -> Optional[str]:
-        """
-        Retrieve media content from Google Drive and save to temporary file.
-
-        Args:
-            file_id (str): Google Drive file ID
-
-        Returns:
-            Optional[str]: Path to temporary file containing the media
-        """
+        """Retrieve media content from Google Drive with retry logic."""
         logger.info(f"Attempting to retrieve media content for file_id: {file_id}")
         temp_dir = None
-        try:
-            # Create a temporary directory
-            temp_dir = tempfile.mkdtemp()
-            temp_file_path = Path(temp_dir) / f"temp_media_{file_id}"
-            
-            request = self.drive_service.files().get_media(fileId=file_id)
-            
-            # Get file metadata to determine extension
-            file_metadata = self.drive_service.files().get(fileId=file_id, fields='name').execute()
-            file_extension = Path(file_metadata['name']).suffix
-            temp_file_path = temp_file_path.with_suffix(file_extension)
-            
-            with open(temp_file_path, 'wb') as f:
-                downloader = MediaIoBaseDownload(f, request)
-                done = False
-                while not done:
-                    status, done = downloader.next_chunk()
-                    if status:
-                        logger.info(f"Download progress: {int(status.progress() * 100)}%")
-            
-            logger.info(f"Successfully saved media to temporary file: {temp_file_path}")
-            return str(temp_file_path)
-            
-        except Exception as e:
-            logger.error(f"Error retrieving media from Google Drive: {e}")
-            if temp_dir:
-                shutil.rmtree(temp_dir)
-            return None
+        max_retries = 3
+        retry_delay = 5
+
+        for attempt in range(max_retries):
+            try:
+                temp_dir = tempfile.mkdtemp()
+                temp_file_path = Path(temp_dir) / f"temp_media_{file_id}"
+                
+                request = self.drive_service.files().get_media(fileId=file_id)
+                
+                # Get file metadata to determine extension
+                file_metadata = self.drive_service.files().get(fileId=file_id, fields="name").execute()
+                file_extension = Path(file_metadata["name"]).suffix
+                temp_file_path = temp_file_path.with_suffix(file_extension)
+                
+                with open(temp_file_path, "wb") as f:
+                    downloader = MediaIoBaseDownload(f, request)
+                    done = False
+                    while not done:
+                        status, done = downloader.next_chunk()
+                        if status:
+                            logger.info(f"Download progress: {int(status.progress() * 100)}%")
+                
+                logger.info(f"Successfully saved media to temporary file: {temp_file_path}")
+                return str(temp_file_path)
+                
+            except Exception as e:
+                logger.error(f"Error retrieving media from Google Drive (attempt {attempt + 1}/{max_retries}): {e}")
+                if temp_dir:
+                    shutil.rmtree(temp_dir)
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                else:
+                    return None
 
     def publish_content(self, content: Dict[str, Any]) -> bool:
         """
@@ -223,11 +224,13 @@ class IgContentPublisher:
             bool: True if published successfully, False otherwise
         """
         temp_files = []  # Keep track of temporary files
-        
+
         try:
             # Validate session before publishing
             if not self.ig_client.validate_session():
-                logger.error("❌ Instagram session is invalid. Stopping all publishing attempts.")
+                logger.error(
+                    "❌ Instagram session is invalid. Stopping all publishing attempts."
+                )
                 self.update_content_status(content["content_id"], "failed")
                 return False  # Return immediately if session is invalid
 
@@ -235,9 +238,12 @@ class IgContentPublisher:
             if content["media_type"] == "video":
                 try:
                     import moviepy.editor as mp
+
                     logger.info("moviepy package is available for video processing")
                 except ImportError:
-                    logger.error("moviepy package is required for video uploads. Please install: pip install moviepy>=1.0.3")
+                    logger.error(
+                        "moviepy package is required for video uploads. Please install: pip install moviepy>=1.0.3"
+                    )
                     self.update_content_status(content["content_id"], "failed")
                     return False
 
@@ -253,7 +259,7 @@ class IgContentPublisher:
             logger.info(f"Media type: {content['media_type']}")
 
             # Add delay before Instagram API access
-            logger.warning("⚠️ Waiting 5 seconds before Instagram API access...")
+            logger.warning(" Waiting 5 seconds before Instagram API access...")
             time.sleep(5)
 
             # Prepare location if provided
@@ -265,7 +271,9 @@ class IgContentPublisher:
                 )
 
             # Get media files
-            media_paths = content["media_paths"].split(",") if content["media_paths"] else []
+            media_paths = (
+                content["media_paths"].split(",") if content["media_paths"] else []
+            )
             logger.info(f"Found {len(media_paths)} media files to process")
 
             media_files = []
@@ -307,9 +315,16 @@ class IgContentPublisher:
                         media_files[0], caption=caption, location=location
                     )
                 elif content["content_type"] == "story":
-                    # Add story handling here if needed
-                    logger.error("Story publishing not yet implemented")
-                    return False
+                    result = self.publish_story(content)
+                    if result:
+                        logger.info(
+                            f"Successfully published story for content_id: {content['content_id']}"
+                        )
+                    else:
+                        logger.error(
+                            f"Failed to publish story for content_id: {content['content_id']}"
+                        )
+                        return False
             except Exception as e:
                 logger.error(f"Publishing error: {str(e)}")
                 logger.error(f"Traceback: {traceback.format_exc()}")
@@ -337,18 +352,21 @@ class IgContentPublisher:
                 except Exception as e:
                     logger.warning(f"Error cleaning up temporary file {temp_file}: {e}")
 
-    def update_content_status(self, content_id: int, status: str, result: Optional[Media] = None) -> None:
+    def update_content_status(
+        self, content_id: int, status: str, result: Optional[Media] = None
+    ) -> None:
         """Update the status of content in both database and Google Sheet."""
         try:
-            logger.info(f"Starting status update for content_id {content_id} to {status}")
-            
+            logger.info(
+                f"Starting status update for content_id {content_id} to {status}"
+            )
+
             # First, get the content data including gs_row_number
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT * FROM content WHERE content_id = ?",
-                    (content_id,)
+                    "SELECT * FROM content WHERE content_id = ?", (content_id,)
                 )
                 content = dict(cursor.fetchone())
                 logger.info(f"Retrieved content data: {content}")
@@ -370,6 +388,9 @@ class IgContentPublisher:
                             if result.product_type == "clips":  # Reel
                                 logger.info("Updating reels table for reel content")
                                 self._update_reels_table(cursor, content_id, result)
+                            elif content["content_type"] == "story":  # Story
+                                logger.info("Updating stories table for story content")
+                                self._update_stories_table(cursor, content_id, result)
                             else:  # Video post
                                 logger.info("Updating posts table for video content")
                                 self._update_posts_table(cursor, content_id, result)
@@ -378,11 +399,55 @@ class IgContentPublisher:
                 logger.info("Database updates committed successfully")
 
             # Update Google Sheet status
-            self.update_google_sheet_status(content, status)
-            logger.info("Completed status update process")
+            if content.get('gs_row_number'):
+                # First, get the header row to find column indices
+                header_range = "'Ig Origin Data'!1:1"
+                headers = self.gs_handler.read_spreadsheet(self.gs_handler.spreadsheet_id, header_range)
+                if not headers or not headers[0]:
+                    logger.error("Failed to read Google Sheet headers")
+                    return
 
-        except sqlite3.Error as e:
-            logger.error(f"Database error updating status: {e}")
+                # Create a mapping of column titles to their indices
+                column_mapping = {title: idx + 1 for idx, title in enumerate(headers[0])}
+                
+                # Prepare batch updates based on status
+                batch_data = []
+                row_number = content['gs_row_number']
+                
+                if status == "published":
+                    # For published content, update all four columns
+                    current_time = datetime.now()
+                    updates_map = {
+                        "content_id": str(content_id),
+                        "status": "published",
+                        "publish_date": current_time.strftime("%Y-%m-%d"),
+                        "publish_time": current_time.strftime("%H:%M:%S")
+                    }
+                else:
+                    # For failed content, only update status column
+                    updates_map = {
+                        "status": "failed"
+                    }
+
+                # Create batch update data
+                for column_title, value in updates_map.items():
+                    if column_title in column_mapping:
+                        column_letter = self._number_to_column_letter(column_mapping[column_title])
+                        batch_data.append({
+                            "range": f"'Ig Origin Data'!{column_letter}{row_number}",
+                            "values": [[value]]
+                        })
+                    else:
+                        logger.warning(f"Column '{column_title}' not found in Google Sheet")
+
+                if batch_data:
+                    if self.gs_handler.batch_update(self.gs_handler.spreadsheet_id, batch_data):
+                        logger.info(f"Successfully updated Google Sheet for content_id {content_id}")
+                    else:
+                        logger.error(f"Failed to update Google Sheet for content_id {content_id}")
+                else:
+                    logger.error("No columns to update in Google Sheet")
+
         except Exception as e:
             logger.error(f"Error updating status: {e}")
             logger.error(traceback.format_exc())
@@ -392,6 +457,40 @@ class IgContentPublisher:
     ) -> None:
         """Update the posts table with the API response data."""
         try:
+            # First check if a record already exists
+            cursor.execute("SELECT post_id FROM posts WHERE content_id = ?", (content_id,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                logger.info(f"Updating existing post record for content_id: {content_id}")
+                cursor.execute(
+                    """
+                    UPDATE posts SET
+                        media_type = ?, product_type = ?, caption = ?, timestamp = ?,
+                        media_url = ?, location_pk = ?, location_name = ?, like_count = ?,
+                        comment_count = ?, is_album = ?, album_media_ids = ?,
+                        album_media_urls = ?, status = ?
+                    WHERE content_id = ?
+                    """,
+                    (
+                        result.media_type,
+                        result.product_type,
+                        result.caption_text,
+                        result.taken_at.isoformat(),
+                        result.thumbnail_url,
+                        result.location.pk if result.location else None,
+                        result.location.name if result.location else None,
+                        result.like_count,
+                        result.comment_count,
+                        bool(result.resources),
+                        ",".join(str(r.pk) for r in result.resources) if result.resources else None,
+                        ",".join(r.thumbnail_url for r in result.resources) if result.resources else None,
+                        "active",
+                        content_id
+                    )
+                )
+            else:
+                logger.info(f"Inserting new post record for content_id: {content_id}")
             cursor.execute(
                 """
                 INSERT INTO posts (
@@ -412,13 +511,23 @@ class IgContentPublisher:
                     result.like_count,
                     result.comment_count,
                     bool(result.resources),
-                    ",".join(str(r.pk) for r in result.resources) if result.resources else None,
-                    ",".join(r.thumbnail_url for r in result.resources) if result.resources else None,
-                    "active"
+                        ",".join(str(r.pk) for r in result.resources) if result.resources else None,
+                        ",".join(r.thumbnail_url for r in result.resources) if result.resources else None,
+                        "active"
+                    )
                 )
-            )
-            logger.info(f"Successfully updated posts table for content_id: {content_id}")
+            
+            # Verify the update/insert
+            cursor.execute("SELECT * FROM posts WHERE content_id = ?", (content_id,))
+            if cursor.fetchone():
+                logger.info(f"Successfully updated posts table for content_id: {content_id}")
+            else:
+                raise Exception("Failed to verify post record after update/insert")
+                
         except sqlite3.Error as e:
+            logger.error(f"SQLite error updating posts table: {e}")
+            raise
+        except Exception as e:
             logger.error(f"Error updating posts table: {e}")
             raise
 
@@ -426,6 +535,36 @@ class IgContentPublisher:
         self, cursor: sqlite3.Cursor, content_id: int, result: Media
     ) -> None:
         """Update the reels table with the API response data."""
+        try:
+            # First check if a record already exists
+            cursor.execute("SELECT reel_id FROM reels WHERE content_id = ?", (content_id,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                logger.info(f"Updating existing reel record for content_id: {content_id}")
+                cursor.execute(
+                    """
+                    UPDATE reels SET
+                        caption = ?, timestamp = ?, media_url = ?, thumbnail_url = ?,
+                        location_pk = ?, location_name = ?, like_count = ?,
+                        comment_count = ?, status = ?
+                    WHERE content_id = ?
+                    """,
+                    (
+                        result.caption_text,
+                        result.taken_at.isoformat(),
+                        result.video_url,
+                        result.thumbnail_url,
+                        result.location.pk if result.location else None,
+                        result.location.name if result.location else None,
+                        result.like_count,
+                        result.comment_count,
+                        "active",
+                        content_id
+                    )
+                )
+            else:
+                logger.info(f"Inserting new reel record for content_id: {content_id}")
         cursor.execute(
             """
             INSERT INTO reels (
@@ -434,7 +573,7 @@ class IgContentPublisher:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
-                content_id,  # This is the foreign key referencing content.content_id
+                        content_id,
                 result.caption_text,
                 result.taken_at.isoformat(),
                 result.video_url,
@@ -443,26 +582,192 @@ class IgContentPublisher:
                 result.location.name if result.location else None,
                 result.like_count,
                 result.comment_count,
-                "active",
-            ),
-        )
+                        "active"
+                    )
+                )
+            
+            # Verify the update/insert
+            cursor.execute("SELECT * FROM reels WHERE content_id = ?", (content_id,))
+            if cursor.fetchone():
+                logger.info(f"Successfully updated reels table for content_id: {content_id}")
+            else:
+                raise Exception("Failed to verify reel record after update/insert")
+                
+        except sqlite3.Error as e:
+            logger.error(f"SQLite error updating reels table: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error updating reels table: {e}")
+            raise
+
+    def _update_stories_table(
+        self, cursor: sqlite3.Cursor, content_id: int, result: Media
+    ) -> None:
+        """Update the stories table with the API response data."""
+        try:
+            cursor.execute(
+                """
+                INSERT INTO stories (
+                    story_id, content_id, code, taken_at, reel_url,
+                    caption, mentions, location_id, hashtags, link
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(result.pk),
+                    content_id,
+                    result.code,
+                    result.taken_at.isoformat(),
+                    (
+                        result.video_url
+                        if result.media_type == 2
+                        else result.thumbnail_url
+                    ),
+                    result.caption_text,
+                    (
+                        ",".join(mention.user.username for mention in result.mentions)
+                        if result.mentions
+                        else None
+                    ),
+                    result.location.pk if result.location else None,
+                    (
+                        ",".join(f"#{tag.name}" for tag in result.hashtags)
+                        if result.hashtags
+                        else None
+                    ),
+                    result.story_cta[0].url if result.story_cta else None,
+                ),
+            )
+            logger.info(
+                f"Successfully updated stories table for content_id: {content_id}"
+            )
+        except sqlite3.Error as e:
+            logger.error(f"Error updating stories table: {e}")
+            raise
+
+    def publish_story(self, content: Dict[str, Any]) -> Optional[Media]:
+        """
+        Publish a story to Instagram.
+
+        Args:
+            content (Dict[str, Any]): Content data from database
+
+        Returns:
+            Optional[Media]: The published story media object if successful, None otherwise
+        """
+        try:
+            # Get media file
+            media_paths = (
+                content["media_paths"].split(",") if content["media_paths"] else []
+            )
+            if not media_paths:
+                raise ValueError("No media file provided for story")
+
+            temp_file = self.get_media_content(media_paths[0].strip())
+            if not temp_file:
+                raise ValueError(f"Failed to retrieve media file")
+
+            # Prepare caption and mentions
+            caption = content["caption"] or ""
+            mentions = []
+            if content["mentions"]:
+                for mention in content["mentions"].split():
+                    username = mention.strip("@")
+                    user_id = self.ig_client.get_user_id(username)
+                    if user_id:
+                        mentions.append(
+                            {
+                                "user_id": user_id,
+                                "x": 0.5,  # Center of story
+                                "y": 0.5,
+                                "width": 0.5,
+                                "height": 0.1,
+                            }
+                        )
+
+            # Prepare hashtags
+            hashtags = []
+            if content["hashtags"]:
+                hashtags = [tag.strip("#") for tag in content["hashtags"].split()]
+
+            # Prepare location
+            location = None
+            if content["location_id"]:
+                location = Location(
+                    pk=content["location_id"], name=content.get("location_name", "")
+                )
+
+            # Prepare link if available
+            links = []
+            if content.get("link"):
+                links.append({"webUri": content["link"]})
+
+            # Publish story based on media type
+            if content["media_type"] == "photo":
+                result = self.post_manager.upload_story_photo(
+                    temp_file,
+                    caption=caption,
+                    mentions=mentions,
+                    hashtags=hashtags,
+                    location=location,
+                    links=links,
+                )
+            elif content["media_type"] == "video":
+                result = self.post_manager.upload_story_video(
+                    temp_file,
+                    caption=caption,
+                    mentions=mentions,
+                    hashtags=hashtags,
+                    location=location,
+                    links=links,
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported media type for story: {content['media_type']}"
+                )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error publishing story: {str(e)}")
+            logger.error(traceback.format_exc())
+            return None
+        finally:
+            # Clean up temporary file
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                    logger.info(f"Cleaned up temporary file: {temp_file}")
+                except Exception as e:
+                    logger.warning(f"Error cleaning up temporary file {temp_file}: {e}")
 
     def process_pending_content(self) -> None:
         """Process all pending content that is due for publication."""
         pending_content = self.get_pending_content()
         logger.info(f"Found {len(pending_content)} pending items to publish")
 
-        for content in pending_content:
+        for i, content in enumerate(pending_content):
             try:
+                logger.info(f"\nProcessing content {i+1} of {len(pending_content)}")
                 success = self.publish_content(content)
+                
                 if success:
-                    logger.info(
-                        f"Successfully published content {content['content_id']}"
-                    )
+                    logger.info(f"Successfully published content {content['content_id']}")
                 else:
                     logger.error(f"Failed to publish content {content['content_id']}")
+                
             except Exception as e:
                 logger.error(f"Error processing content {content['content_id']}: {e}")
+                
+            finally:
+                # Always ask to continue, whether success, failure, or error
+                if i < len(pending_content) - 1:  # Don't ask after the last item
+                    continue_response = input("\nDo you want to process the next content? (y/N/q): ").lower()
+                    if continue_response == 'q':
+                        logger.info("Exiting program...")
+                        return
+                    elif continue_response != 'y':
+                        logger.info("Stopping content processing")
+                        return
 
     def update_google_sheet_status(self, content: Dict[str, Any], status: str) -> None:
         """
@@ -473,8 +778,10 @@ class IgContentPublisher:
             status (str): The status to update ('published' or 'failed')
         """
         try:
-            if not content.get('gs_row_number'):
-                logger.warning(f"No Google Sheet row number for content_id: {content['content_id']}")
+            if not content.get("gs_row_number"):
+                logger.warning(
+                    f"No Google Sheet row number for content_id: {content['content_id']}"
+                )
                 return
 
             # Get the spreadsheet ID from the GoogleSheetsHandler
@@ -484,38 +791,41 @@ class IgContentPublisher:
                 return
 
             # Prepare the update data
-            row_number = content['gs_row_number']
+            row_number = content["gs_row_number"]
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
+
             # Update status column (assuming it's column N)
             status_range = f"'Ig Origin Data'!N{row_number}"
             status_value = [["Y" if status == "published" else "Failed"]]
-            
+
             # Update timestamp column (assuming it's column O)
             timestamp_range = f"'Ig Origin Data'!O{row_number}"
             timestamp_value = [[current_time]]
 
             # Batch update the sheet
             batch_data = [
-                {
-                    "range": status_range,
-                    "values": status_value
-                },
-                {
-                    "range": timestamp_range,
-                    "values": timestamp_value
-                }
+                {"range": status_range, "values": status_value},
+                {"range": timestamp_range, "values": timestamp_value},
             ]
 
             result = self.gs_handler.batch_update(spreadsheet_id, batch_data)
             if result:
-                logger.info(f"Updated Google Sheet status for content_id {content['content_id']} to {status}")
+                logger.info(
+                    f"Updated Google Sheet status for content_id {content['content_id']} to {status}"
+                )
             else:
-                logger.error(f"Failed to update Google Sheet for content_id {content['content_id']}")
+                logger.error(
+                    f"Failed to update Google Sheet for content_id {content['content_id']}"
+                )
 
         except Exception as e:
             logger.error(f"Error updating Google Sheet status: {e}")
             logger.error(traceback.format_exc())
 
-
-
+    def _number_to_column_letter(self, n: int) -> str:
+        """Convert a column number to column letter (1 = A, 27 = AA, etc.)."""
+        result = ""
+        while n > 0:
+            n, remainder = divmod(n - 1, 26)
+            result = chr(65 + remainder) + result
+        return result
