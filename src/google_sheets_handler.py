@@ -75,15 +75,7 @@ class GoogleSheetsHandler:
         return config_path
 
     def authenticate(self) -> None:
-        """
-        Authenticate with Google APIs.
-
-        This method handles authentication for both development and production modes:
-        - In development mode, it loads credentials from the config file.
-        - In production mode, it uses the full OAuth 2.0 flow.
-
-        The method also refreshes expired tokens and saves new tokens in development mode.
-        """
+        """Authenticate with Google APIs."""
         try:
             config_path = self._get_config_path()
 
@@ -100,8 +92,13 @@ class GoogleSheetsHandler:
 
             if not self.creds or not self.creds.valid:
                 if self.creds and self.creds.expired and self.creds.refresh_token:
-                    self.creds.refresh(Request())
-                else:
+                    try:
+                        self.creds.refresh(Request())
+                    except RefreshError:
+                        logger.error("Token refresh failed, need to re-authenticate")
+                        self.creds = None
+                
+                if not self.creds:
                     client_secrets_file = os.getenv(
                         f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}"
                     )
@@ -129,17 +126,11 @@ class GoogleSheetsHandler:
 
             logger.info("Successfully authenticated with Google services")
 
-        except RefreshError as e:
-            print(f"Error refreshing token: {e}")
-            # Handle the error (e.g., log the error, retry with exponential backoff)
-
-        except HttpError as e:
-            if e.resp.status in [401, 403]:  # 401 Unauthorized or 403 Forbidden
-                print(f"Authorization error: {e}")
-                # Handle authorization errors (e.g., re-authenticate)
-            else:
-                print(f"An HTTP error occurred: {e}")
-                # Handle other HTTP errors
+        except Exception as e:
+            logger.error(f"Authentication failed: {e}")
+            self.sheets_service = None
+            self.drive_service = None
+            raise
 
     def create_spreadsheet(self, title: str, folder_id: str) -> Optional[str]:
         """

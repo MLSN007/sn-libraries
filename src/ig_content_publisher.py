@@ -63,10 +63,16 @@ class IgContentPublisher:
         self.ig_client = IgClient(account_id)
         self.post_manager = IgPostManager(self.ig_client)
         self.gs_handler = GoogleSheetsHandler(account_id)
-        self.gs_handler.authenticate()
 
-        # Initialize Google Sheet and Drive services
-        self.drive_service: Resource = cast(Resource, self.gs_handler.drive_service)
+        # Try to authenticate Google services
+        try:
+            self.gs_handler.authenticate()
+            if not self.gs_handler.sheets_service or not self.gs_handler.drive_service:
+                raise Exception("Google services authentication failed")
+        except Exception as e:
+            logger.error(f"Failed to authenticate Google services: {e}")
+            logger.info("You may need to re-authenticate or provide new credentials")
+            raise
 
         # Initialize Google Sheet setup
         folder_name = "ig JK tests"  # Make this configurable if needed
@@ -190,16 +196,27 @@ class IgContentPublisher:
         max_retries = 3
         retry_delay = 5
 
+        # Check if Google services are available
+        if not self.gs_handler.drive_service:
+            try:
+                logger.info("Attempting to re-authenticate Google services...")
+                self.gs_handler.authenticate()
+                if not self.gs_handler.drive_service:
+                    raise Exception("Failed to authenticate Google Drive service")
+            except Exception as e:
+                logger.error(f"Failed to re-authenticate: {e}")
+                return None
+
         for attempt in range(max_retries):
             try:
                 temp_dir = tempfile.mkdtemp()
                 temp_file_path = Path(temp_dir) / f"temp_media_{file_id}"
 
-                request = self.drive_service.files().get_media(fileId=file_id)
+                request = self.gs_handler.drive_service.files().get_media(fileId=file_id)
 
                 # Get file metadata to determine extension
                 file_metadata = (
-                    self.drive_service.files()
+                    self.gs_handler.drive_service.files()
                     .get(fileId=file_id, fields="name")
                     .execute()
                 )
@@ -212,22 +229,31 @@ class IgContentPublisher:
                     while not done:
                         status, done = downloader.next_chunk()
                         if status:
-                            logger.info(
-                                f"Download progress: {int(status.progress() * 100)}%"
-                            )
+                            logger.info(f"Download progress: {int(status.progress() * 100)}%")
 
-                logger.info(
-                    f"Successfully saved media to temporary file: {temp_file_path}"
-                )
+                logger.info(f"Successfully saved media to temporary file: {temp_file_path}")
                 return str(temp_file_path)
 
             except Exception as e:
                 logger.error(
                     f"Error retrieving media from Google Drive (attempt {attempt + 1}/{max_retries}): {e}"
                 )
-                if temp_dir:
-                    shutil.rmtree(temp_dir)
+                try:
+                    if temp_dir and os.path.exists(temp_dir):
+                        # Close any open handles to the file
+                        import gc
+                        gc.collect()
+                        time.sleep(1)  # Give time for handles to be released
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception as cleanup_e:
+                    logger.warning(f"Error during cleanup: {cleanup_e}")
+
                 if attempt < max_retries - 1:
+                    try:
+                        logger.info("Attempting to re-authenticate before retry...")
+                        self.gs_handler.authenticate()
+                    except Exception as auth_e:
+                        logger.error(f"Re-authentication failed: {auth_e}")
                     time.sleep(retry_delay * (attempt + 1))
                 else:
                     return None
@@ -247,11 +273,19 @@ class IgContentPublisher:
         try:
             # Validate session before publishing
             if not self.ig_client.validate_session():
-                logger.error(
-                    "❌ Instagram session is invalid. Stopping all publishing attempts."
-                )
-                self.update_content_status(content["content_id"], "failed")
-                return False  # Return immediately if session is invalid
+                logger.error("❌ Instagram session is invalid. Attempting to re-authenticate...")
+                try:
+                    # Force a new login
+                    self.ig_client.client.login(force=True)
+                    if not self.ig_client.validate_session():
+                        logger.error("❌ Re-authentication failed. Stopping publishing attempt.")
+                        self.update_content_status(content["content_id"], "failed")
+                        return False
+                    logger.info("✅ Successfully re-authenticated")
+                except Exception as e:
+                    logger.error(f"❌ Re-authentication error: {e}")
+                    self.update_content_status(content["content_id"], "failed")
+                    return False
 
             # Check for required dependencies for video content
             if content["media_type"] == "video":
@@ -340,24 +374,34 @@ class IgContentPublisher:
                     # Update database with the result
                     with sqlite3.connect(self.db_path) as conn:
                         cursor = conn.cursor()
-                        
+
                         # Update content status first
-                        self.update_content_status(content["content_id"], "published", result)
-                        
+                        self.update_content_status(
+                            content["content_id"], "published", result
+                        )
+
                         # Try to update specific content table, but don't fail if it errors
                         try:
                             if content["content_type"] == "post":
-                                self._update_posts_table(cursor, content["content_id"], result)
+                                self._update_posts_table(
+                                    cursor, content["content_id"], result
+                                )
                             elif content["content_type"] == "reel":
-                                self._update_reels_table(cursor, content["content_id"], result)
+                                self._update_reels_table(
+                                    cursor, content["content_id"], result
+                                )
                             elif content["content_type"] == "story":
-                                self._update_stories_table(cursor, content["content_id"], result)
+                                self._update_stories_table(
+                                    cursor, content["content_id"], result
+                                )
                         except Exception as e:
-                            logger.error(f"Error updating {content['content_type']} table: {e}")
+                            logger.error(
+                                f"Error updating {content['content_type']} table: {e}"
+                            )
                             # Don't raise the exception - the content was still published successfully
-                        
+
                         conn.commit()
-                    
+
                     return True
                 else:
                     self.update_content_status(content["content_id"], "failed")
@@ -378,10 +422,19 @@ class IgContentPublisher:
             for temp_file in temp_files:
                 try:
                     if temp_file and os.path.exists(temp_file):
+                        # Close any open handles to the file
+                        import gc
+                        gc.collect()
+                        time.sleep(1)  # Give time for handles to be released
                         os.remove(temp_file)
                         logger.info(f"Cleaned up temporary file: {temp_file}")
                 except Exception as e:
                     logger.warning(f"Error cleaning up temporary file {temp_file}: {e}")
+                    try:
+                        # Try alternative cleanup method
+                        shutil.rmtree(os.path.dirname(temp_file), ignore_errors=True)
+                    except Exception as e2:
+                        logger.warning(f"Alternative cleanup also failed: {e2}")
 
     def update_content_status(
         self, content_id: int, status: str, result: Optional[Media] = None
@@ -497,7 +550,9 @@ class IgContentPublisher:
             logger.error(f"Error updating status: {e}")
             logger.error(traceback.format_exc())
 
-    def _update_posts_table(self, cursor: sqlite3.Cursor, content_id: int, result: Media) -> None:
+    def _update_posts_table(
+        self, cursor: sqlite3.Cursor, content_id: int, result: Media
+    ) -> None:
         """Update the posts table with the API response data."""
         try:
             # First check if a record already exists
@@ -516,44 +571,61 @@ class IgContentPublisher:
                 return default
 
             # Get timestamp
-            taken_at = safe_get_attr(result, 'taken_at', 'created_at', 'timestamp')
+            taken_at = safe_get_attr(result, "taken_at", "created_at", "timestamp")
             if taken_at:
-                timestamp = taken_at.isoformat() if hasattr(taken_at, 'isoformat') else str(taken_at)
+                timestamp = (
+                    taken_at.isoformat()
+                    if hasattr(taken_at, "isoformat")
+                    else str(taken_at)
+                )
             else:
                 timestamp = datetime.now().isoformat()
 
             # Get media URL
-            media_url = safe_get_attr(result, 'thumbnail_url', 'url', 'media_url')
+            media_url = safe_get_attr(result, "thumbnail_url", "url", "media_url")
 
             # Get location info
-            location = safe_get_attr(result, 'location')
+            location = safe_get_attr(result, "location")
             location_pk = location.pk if location else None
             location_name = location.name if location else None
 
             # Get resources (for album posts)
-            resources = safe_get_attr(result, 'resources', 'carousel_media', default=[])
-            
+            resources = safe_get_attr(result, "resources", "carousel_media", default=[])
+
             # Common values for insert/update
             values = (
-                safe_get_attr(result, 'media_type', default=1),
-                safe_get_attr(result, 'product_type', default=''),
-                safe_get_attr(result, 'caption_text', 'caption', default=''),
+                safe_get_attr(result, "media_type", default=1),
+                safe_get_attr(result, "product_type", default=""),
+                safe_get_attr(result, "caption_text", "caption", default=""),
                 timestamp,
                 media_url,
                 location_pk,
                 location_name,
-                safe_get_attr(result, 'like_count', default=0),
-                safe_get_attr(result, 'comment_count', default=0),
+                safe_get_attr(result, "like_count", default=0),
+                safe_get_attr(result, "comment_count", default=0),
                 bool(resources),
-                ",".join(str(safe_get_attr(r, 'pk', 'id')) for r in resources) if resources else None,
-                ",".join(safe_get_attr(r, 'thumbnail_url', 'url', default='') for r in resources) if resources else None,
+                (
+                    ",".join(str(safe_get_attr(r, "pk", "id")) for r in resources)
+                    if resources
+                    else None
+                ),
+                (
+                    ",".join(
+                        safe_get_attr(r, "thumbnail_url", "url", default="")
+                        for r in resources
+                    )
+                    if resources
+                    else None
+                ),
                 "active",
                 content_id,
             )
 
             try:
                 if existing:
-                    logger.info(f"Updating existing post record for content_id: {content_id}")
+                    logger.info(
+                        f"Updating existing post record for content_id: {content_id}"
+                    )
                     cursor.execute(
                         """
                         UPDATE posts SET
@@ -566,7 +638,9 @@ class IgContentPublisher:
                         values,
                     )
                 else:
-                    logger.info(f"Inserting new post record for content_id: {content_id}")
+                    logger.info(
+                        f"Inserting new post record for content_id: {content_id}"
+                    )
                     cursor.execute(
                         """
                         INSERT INTO posts (
@@ -584,7 +658,9 @@ class IgContentPublisher:
             # Verify the update/insert
             cursor.execute("SELECT * FROM posts WHERE content_id = ?", (content_id,))
             if cursor.fetchone():
-                logger.info(f"Successfully updated posts table for content_id: {content_id}")
+                logger.info(
+                    f"Successfully updated posts table for content_id: {content_id}"
+                )
             else:
                 raise Exception("Failed to verify post record after update/insert")
 
@@ -593,10 +669,12 @@ class IgContentPublisher:
             logger.error(f"Traceback: {traceback.format_exc()}")
             # Log error but don't raise - allow the main process to continue
 
-    def _update_reels_table(self, cursor: sqlite3.Cursor, content_id: int, result: Media) -> None:
+    def _update_reels_table(
+        self, cursor: sqlite3.Cursor, content_id: int, result: Media
+    ) -> None:
         """
         Update the reels table with the API response data.
-        
+
         Args:
             cursor (sqlite3.Cursor): Database cursor
             content_id (int): Content ID from the content table
@@ -617,36 +695,36 @@ class IgContentPublisher:
                 return default
 
             # Get timestamp - Instagrapi uses taken_at
-            taken_at = safe_get_attr(result, 'taken_at')
+            taken_at = safe_get_attr(result, "taken_at")
             timestamp = taken_at.isoformat() if taken_at else datetime.now().isoformat()
 
             # Get location info - Instagrapi uses location object
-            location = safe_get_attr(result, 'location')
-            
+            location = safe_get_attr(result, "location")
+
             # Get media URLs - Instagrapi provides video_url for reels
-            media_url = safe_get_attr(result, 'video_url')
-            thumbnail_url = safe_get_attr(result, 'thumbnail_url')
+            media_url = safe_get_attr(result, "video_url")
+            thumbnail_url = safe_get_attr(result, "thumbnail_url")
 
             # Get audio info - Instagrapi provides music_info for reels
-            music_info = safe_get_attr(result, 'music_info', 'audio_metadata')
-            audio_track = json.dumps(music_info) if music_info else ''
+            music_info = safe_get_attr(result, "music_info", "audio_metadata")
+            audio_track = json.dumps(music_info) if music_info else ""
 
             # Get clips metadata - Instagrapi provides clips_metadata
-            clips_metadata = safe_get_attr(result, 'clips_metadata')
-            effects = json.dumps(clips_metadata) if clips_metadata else ''
+            clips_metadata = safe_get_attr(result, "clips_metadata")
+            effects = json.dumps(clips_metadata) if clips_metadata else ""
 
             # Get duration - Instagrapi provides video_duration
-            duration = safe_get_attr(result, 'video_duration', default=0)
+            duration = safe_get_attr(result, "video_duration", default=0)
 
             values = (
-                safe_get_attr(result, 'caption_text', 'caption', default=''),
+                safe_get_attr(result, "caption_text", "caption", default=""),
                 timestamp,
                 media_url,
                 thumbnail_url,
                 location.pk if location else None,
                 location.name if location else None,
-                safe_get_attr(result, 'like_count', default=0),
-                safe_get_attr(result, 'comment_count', default=0),
+                safe_get_attr(result, "like_count", default=0),
+                safe_get_attr(result, "comment_count", default=0),
                 audio_track,
                 effects,
                 duration,
@@ -655,7 +733,9 @@ class IgContentPublisher:
             )
 
             if existing:
-                logger.info(f"Updating existing reel record for content_id: {content_id}")
+                logger.info(
+                    f"Updating existing reel record for content_id: {content_id}"
+                )
                 cursor.execute(
                     """
                     UPDATE reels SET
@@ -683,7 +763,9 @@ class IgContentPublisher:
             # Verify the update/insert
             cursor.execute("SELECT * FROM reels WHERE content_id = ?", (content_id,))
             if cursor.fetchone():
-                logger.info(f"Successfully updated reels table for content_id: {content_id}")
+                logger.info(
+                    f"Successfully updated reels table for content_id: {content_id}"
+                )
             else:
                 raise Exception("Failed to verify reel record after update/insert")
 
@@ -692,16 +774,19 @@ class IgContentPublisher:
             logger.error(f"Traceback: {traceback.format_exc()}")
             # Log error but don't raise - allow the main process to continue
 
-    def _update_stories_table(self, cursor: sqlite3.Cursor, content_id: int, result: Media) -> None:
+    def _update_stories_table(
+        self, cursor: sqlite3.Cursor, content_id: int, result: Media
+    ) -> None:
         """
         Update the stories table with the API response data.
-        
+
         Args:
             cursor (sqlite3.Cursor): Database cursor
             content_id (int): Content ID from the content table
             result (Media): Instagram API response object from story upload
         """
         try:
+
             def safe_get_attr(obj, *attrs, default=None):
                 """Try multiple attribute names, return first found or default."""
                 for attr in attrs:
@@ -711,26 +796,29 @@ class IgContentPublisher:
                 return default
 
             # Get mentions
-            mentions = safe_get_attr(result, 'mentions', default=[])
-            mention_usernames = ",".join(
-                mention.user.username for mention in mentions
-            ) if mentions else None
+            mentions = safe_get_attr(result, "mentions", default=[])
+            mention_usernames = (
+                ",".join(mention.user.username for mention in mentions)
+                if mentions
+                else None
+            )
 
             # Get hashtags
-            hashtags = safe_get_attr(result, 'hashtags', default=[])
-            hashtag_names = ",".join(
-                f"#{tag.name}" for tag in hashtags
-            ) if hashtags else None
+            hashtags = safe_get_attr(result, "hashtags", default=[])
+            hashtag_names = (
+                ",".join(f"#{tag.name}" for tag in hashtags) if hashtags else None
+            )
 
             # Get story link
-            story_cta = safe_get_attr(result, 'story_cta', default=[])
+            story_cta = safe_get_attr(result, "story_cta", default=[])
             link = story_cta[0].url if story_cta else None
 
             # Get media URL based on type
-            media_type = safe_get_attr(result, 'media_type', default=1)
+            media_type = safe_get_attr(result, "media_type", default=1)
             media_url = (
-                safe_get_attr(result, 'video_url') if media_type == 2 
-                else safe_get_attr(result, 'thumbnail_url')
+                safe_get_attr(result, "video_url")
+                if media_type == 2
+                else safe_get_attr(result, "thumbnail_url")
             )
 
             cursor.execute(
@@ -741,19 +829,25 @@ class IgContentPublisher:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    str(safe_get_attr(result, 'pk', 'id')),
+                    str(safe_get_attr(result, "pk", "id")),
                     content_id,
-                    safe_get_attr(result, 'code'),
-                    safe_get_attr(result, 'taken_at').isoformat(),
+                    safe_get_attr(result, "code"),
+                    safe_get_attr(result, "taken_at").isoformat(),
                     media_url,
-                    safe_get_attr(result, 'caption_text', 'caption', default=''),
+                    safe_get_attr(result, "caption_text", "caption", default=""),
                     mention_usernames,
-                    safe_get_attr(result, 'location.pk') if safe_get_attr(result, 'location') else None,
+                    (
+                        safe_get_attr(result, "location.pk")
+                        if safe_get_attr(result, "location")
+                        else None
+                    ),
                     hashtag_names,
                     link,
                 ),
             )
-            logger.info(f"Successfully updated stories table for content_id: {content_id}")
+            logger.info(
+                f"Successfully updated stories table for content_id: {content_id}"
+            )
 
         except Exception as e:
             logger.error(f"Error updating stories table: {e}")
@@ -961,7 +1055,9 @@ class IgContentPublisher:
                 success = self.publish_content(content)
 
                 if success:
-                    logger.info(f"Successfully published content {content['content_id']}")
+                    logger.info(
+                        f"Successfully published content {content['content_id']}"
+                    )
                 else:
                     logger.error(f"Failed to publish content {content['content_id']}")
 
@@ -971,7 +1067,9 @@ class IgContentPublisher:
             finally:
                 # Only ask to continue if there are more items
                 if i < len(pending_content) - 1:
-                    continue_response = input("\nDo you want to process the next content? (y/N/q): ").lower()
+                    continue_response = input(
+                        "\nDo you want to process the next content? (y/N/q): "
+                    ).lower()
                     if continue_response == "q":
                         logger.info("Exiting program...")
                         return
