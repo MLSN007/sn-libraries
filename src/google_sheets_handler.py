@@ -4,11 +4,11 @@ import os
 import pytz
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from googleapiclient._apis.sheets.v4.resources import SpreadsheetsResource
-    from googleapiclient._apis.drive.v3.resources import FilesResource
+    from googleapiclient._apis.drive.v3.resources import FilesResource, DriveResource, AboutResource
 
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
@@ -124,8 +124,8 @@ class GoogleSheetsHandler:
                     json.dump({"token": token_data}, f)
 
             # Build services with static HTTP
-            self.sheets_service = build("sheets", "v4", credentials=self.creds)
-            self.drive_service = build("drive", "v3", credentials=self.creds)
+            self.sheets_service = cast(Resource, build("sheets", "v4", credentials=self.creds))
+            self.drive_service = cast(Resource, build("drive", "v3", credentials=self.creds))
 
             logger.info("Successfully authenticated with Google services")
 
@@ -349,22 +349,22 @@ class GoogleSheetsHandler:
         """
         try:
             body = {
-                'valueInputOption': 'USER_ENTERED',
-                'data': [
-                    {
-                        'range': item['range'],
-                        'values': item['values']
-                    }
-                    for item in data
-                ]
+                "valueInputOption": "USER_ENTERED",
+                "data": [
+                    {"range": item["range"], "values": item["values"]} for item in data
+                ],
             }
 
-            result = self.sheets_service.spreadsheets().values().batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body=body
-            ).execute()
+            result = (
+                self.sheets_service.spreadsheets()
+                .values()
+                .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
+                .execute()
+            )
 
-            logger.info(f"Batch update successful: {result.get('totalUpdatedCells')} cells updated")
+            logger.info(
+                f"Batch update successful: {result.get('totalUpdatedCells')} cells updated"
+            )
             return True
 
         except Exception as e:
@@ -454,7 +454,7 @@ class GoogleSheetsHandler:
     def get_rows_without_content_id(self) -> list:
         """
         Fetches rows from the Google Sheet that do not have a content_id and have data in 'consecutive_input_#'.
-        
+
         Returns:
             list: A list of dictionaries representing rows without content_id.
         """
@@ -470,13 +470,20 @@ class GoogleSheetsHandler:
             consecutive_input_index = header.index("consecutive_input_#")
 
             rows_without_content_id = []
-            for row_idx, row in enumerate(data[1:], start=2):  # Start from 2 to account for header row
+            for row_idx, row in enumerate(
+                data[1:], start=2
+            ):  # Start from 2 to account for header row
                 if len(row) <= max(content_id_index, consecutive_input_index):
                     logger.warning(f"Row {row_idx} is missing expected columns: {row}")
                     continue
                 if row[consecutive_input_index].isdigit() and not row[content_id_index]:
-                    row_dict = {header[i]: row[i] if i < len(row) else None for i in range(len(header))}
-                    row_dict['row_index'] = row_idx  # Add the actual row number from Google Sheet
+                    row_dict = {
+                        header[i]: row[i] if i < len(row) else None
+                        for i in range(len(header))
+                    }
+                    row_dict["row_index"] = (
+                        row_idx  # Add the actual row number from Google Sheet
+                    )
                     rows_without_content_id.append(row_dict)
 
             return rows_without_content_id
@@ -486,25 +493,80 @@ class GoogleSheetsHandler:
 
     def update_content_ids(self, rows: list, content_ids: list) -> None:
         """
-        Updates the Google Sheet with the provided content_ids.
-        
+        Updates the Google Sheet with the provided content_ids in the correct column.
+
         Args:
             rows (list): A list of dictionaries representing rows to update.
             content_ids (list): A list of content_ids to write back to the Google Sheet.
         """
         try:
+            # First, get the header row to find the content_id column
+            header_range = "'Ig Origin Data'!1:1"
+            headers = self.read_spreadsheet(self.spreadsheet_id, header_range)
+
+            if not headers or not headers[0]:
+                logger.error("Failed to read Google Sheet headers")
+                return
+
+            # Find the content_id column index
+            try:
+                content_id_col_idx = headers[0].index("content_id")
+                # Convert to column letter (0-based index to A1 notation)
+                content_id_col = self._number_to_column_letter(content_id_col_idx + 1)
+            except ValueError:
+                logger.error("Could not find 'content_id' column in sheet headers")
+                return
+
             updates = []
             for row, content_id in zip(rows, content_ids):
-                row_index = row['row_index']  # Ensure you have a way to track the row index
-                updates.append({"range": f"C{row_index}", "values": [[content_id]]})
+                row_index = row["row_index"]
+                updates.append(
+                    {
+                        "range": f"'Ig Origin Data'!{content_id_col}{row_index}",
+                        "values": [[content_id]],
+                    }
+                )
 
             if updates:
                 self.batch_update(self.spreadsheet_id, updates)
-                logger.info(f"Updated {len(updates)} content IDs")
+                logger.info(
+                    "Updated %s content IDs in column %s", len(updates), content_id_col
+                )
         except Exception as e:
-            logger.error(f"Error updating content IDs: {e}")
+            logger.error("Error updating content IDs: %s", str(e))
 
+    def _number_to_column_letter(self, n: int) -> str:
+        """
+        Convert a column number to Excel-style column letter (A, B, C, ... Z, AA, AB, etc.)
+        
+        Args:
+            n (int): The column number (1-based)
+            
+        Returns:
+            str: The Excel-style column letter
+        """
+        string = ""
+        while n > 0:
+            n, remainder = divmod(n - 1, 26)
+            string = chr(65 + remainder) + string
+        return string
 
-
-
-
+    def batch_update_values(self, data: List[Dict]) -> None:
+        """
+        Perform a batch update of values in the spreadsheet
+        
+        Args:
+            data (List[Dict]): List of dictionaries containing range and values to update
+        """
+        try:
+            body = {
+                'valueInputOption': 'RAW',
+                'data': data
+            }
+            self.sheets_service.spreadsheets().values().batchUpdate(
+                spreadsheetId=self.spreadsheet_id,
+                body=body
+            ).execute()
+        except Exception as e:
+            logger.error('Error performing batch update: %s', e)
+            raise

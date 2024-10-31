@@ -47,23 +47,62 @@ class FbPostTracker:
     def mark_post_as_published(
         self, row_index: int, post_result: Dict[str, Any]
     ) -> None:
-        range_name = f"'to publish'!L{row_index}:Q{row_index}"
-        post_id = post_result.get("id", "")
-        created_time = datetime.now().isoformat()
-        media_ids = ",".join(f"'{mid}" for mid in post_result.get("media_ids", []))
-        post_link = post_result.get("link", "")
-        media_links = post_result.get("media_links", "")
-        values = [["Y", created_time, f"'{post_id}", media_ids, post_link, media_links]]
-        
-        logger.info(f"Updating 'to publish' sheet for post ID: {post_id}")
-        logger.info(f"Post link: {post_link}")
-        logger.info(f"Media links: {media_links}")
-        
-        result = self.handler.update_spreadsheet(self.spreadsheet_id, range_name, values)
-        if result:
-            logger.info(f"Successfully updated 'to publish' sheet for post ID: {post_id}")
-        else:
-            logger.error(f"Failed to update 'to publish' sheet for post ID: {post_id}")
+        """Update the published status and related information in the spreadsheet."""
+        try:
+            # Get headers to find correct columns
+            headers = self.handler.read_spreadsheet(
+                self.spreadsheet_id, "'to publish'!1:1"
+            )[0]
+
+            # Map column names to indices
+            col_mapping = {
+                "Published? Y/N": None,
+                "Date and Time": None,
+                "Post ID": None,
+                "Media IDs": None,
+                "Post Link": None,
+                "Media Links": None,
+            }
+
+            for idx, header in enumerate(headers):
+                if header in col_mapping:
+                    col_mapping[header] = self._number_to_column_letter(idx + 1)
+
+            # Construct range using found columns
+            start_col = min(col for col in col_mapping.values() if col is not None)
+            end_col = max(col for col in col_mapping.values() if col is not None)
+            range_name = f"'to publish'!{start_col}{row_index}:{end_col}{row_index}"
+
+            # Prepare values in correct order
+            values = [
+                [
+                    "Y",  # Published status
+                    datetime.now().isoformat(),  # Timestamp
+                    f"'{post_result.get('id', '')}",  # Post ID
+                    ",".join(
+                        f"'{mid}" for mid in post_result.get("media_ids", [])
+                    ),  # Media IDs
+                    post_result.get("link", ""),  # Post Link
+                    post_result.get("media_links", ""),  # Media Links
+                ]
+            ]
+
+            result = self.handler.update_spreadsheet(
+                self.spreadsheet_id, range_name, values
+            )
+            if result:
+                logger.info(
+                    "Successfully updated 'to publish' sheet for post ID: %s",
+                    post_result.get("id", ""),
+                )
+            else:
+                logger.error(
+                    "Failed to update 'to publish' sheet for post ID: %s",
+                    post_result.get("id", ""),
+                )
+
+        except Exception as e:
+            logger.error("Error updating published status: %s", str(e))
 
     def add_post_to_published_log(
         self, post_data: Dict[str, Any], post_result: Dict[str, Any]
@@ -86,11 +125,11 @@ class FbPostTracker:
                 media_links,
             ]
         ]
-        
+
         logger.info(f"Adding post to published log. Post ID: {post_id}")
         logger.info(f"Post link: {post_link}")
         logger.info(f"Media links: {media_links}")
-        
+
         result = self.handler.append_to_spreadsheet(
             self.spreadsheet_id, range_name, values
         )

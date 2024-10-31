@@ -19,6 +19,7 @@ import tempfile
 import shutil
 from pathlib import Path
 import traceback
+import json
 
 from ig_client import IgClient
 from ig_post_manager import IgPostManager
@@ -334,26 +335,38 @@ class IgContentPublisher:
                     )
                 elif content["content_type"] == "story":
                     result = self.publish_story(content)
-                    if result:
-                        logger.info(
-                            f"Successfully published story for content_id: {content['content_id']}"
-                        )
-                    else:
-                        logger.error(
-                            f"Failed to publish story for content_id: {content['content_id']}"
-                        )
-                        return False
+
+                if result:
+                    # Update database with the result
+                    with sqlite3.connect(self.db_path) as conn:
+                        cursor = conn.cursor()
+                        
+                        # Update content status first
+                        self.update_content_status(content["content_id"], "published", result)
+                        
+                        # Try to update specific content table, but don't fail if it errors
+                        try:
+                            if content["content_type"] == "post":
+                                self._update_posts_table(cursor, content["content_id"], result)
+                            elif content["content_type"] == "reel":
+                                self._update_reels_table(cursor, content["content_id"], result)
+                            elif content["content_type"] == "story":
+                                self._update_stories_table(cursor, content["content_id"], result)
+                        except Exception as e:
+                            logger.error(f"Error updating {content['content_type']} table: {e}")
+                            # Don't raise the exception - the content was still published successfully
+                        
+                        conn.commit()
+                    
+                    return True
+                else:
+                    self.update_content_status(content["content_id"], "failed")
+                    return False
+
             except Exception as e:
                 logger.error(f"Publishing error: {str(e)}")
                 logger.error(f"Traceback: {traceback.format_exc()}")
                 raise
-
-            if result:
-                self.update_content_status(content["content_id"], "published", result)
-                return True
-            else:
-                self.update_content_status(content["content_id"], "failed")
-                return False
 
         except Exception as e:
             logger.error(f"Error publishing content {content['content_id']}: {str(e)}")
@@ -484,9 +497,7 @@ class IgContentPublisher:
             logger.error(f"Error updating status: {e}")
             logger.error(traceback.format_exc())
 
-    def _update_posts_table(
-        self, cursor: sqlite3.Cursor, content_id: int, result: Media
-    ) -> None:
+    def _update_posts_table(self, cursor: sqlite3.Cursor, content_id: int, result: Media) -> None:
         """Update the posts table with the API response data."""
         try:
             # First check if a record already exists
@@ -495,176 +506,233 @@ class IgContentPublisher:
             )
             existing = cursor.fetchone()
 
-            if existing:
-                logger.info(
-                    f"Updating existing post record for content_id: {content_id}"
-                )
-                cursor.execute(
-                    """
-                    UPDATE posts SET
-                        media_type = ?, product_type = ?, caption = ?, timestamp = ?,
-                        media_url = ?, location_pk = ?, location_name = ?, like_count = ?,
-                        comment_count = ?, is_album = ?, album_media_ids = ?,
-                        album_media_urls = ?, status = ?
-                    WHERE content_id = ?
-                    """,
-                    (
-                        result.media_type,
-                        result.product_type,
-                        result.caption_text,
-                        result.taken_at.isoformat(),
-                        result.thumbnail_url,
-                        result.location.pk if result.location else None,
-                        result.location.name if result.location else None,
-                        result.like_count,
-                        result.comment_count,
-                        bool(result.resources),
-                        (
-                            ",".join(str(r.pk) for r in result.resources)
-                            if result.resources
-                            else None
-                        ),
-                        (
-                            ",".join(r.thumbnail_url for r in result.resources)
-                            if result.resources
-                            else None
-                        ),
-                        "active",
-                        content_id,
-                    ),
-                )
+            # Safely get attributes with fallbacks
+            def safe_get_attr(obj, *attrs, default=None):
+                """Try multiple attribute names, return first found or default."""
+                for attr in attrs:
+                    value = getattr(obj, attr, None)
+                    if value is not None:
+                        return value
+                return default
+
+            # Get timestamp
+            taken_at = safe_get_attr(result, 'taken_at', 'created_at', 'timestamp')
+            if taken_at:
+                timestamp = taken_at.isoformat() if hasattr(taken_at, 'isoformat') else str(taken_at)
             else:
-                logger.info(f"Inserting new post record for content_id: {content_id}")
-            cursor.execute(
-                """
-                INSERT INTO posts (
-                    content_id, media_type, product_type, caption, timestamp,
-                    media_url, location_pk, location_name, like_count, comment_count,
-                    is_album, album_media_ids, album_media_urls, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    content_id,
-                    result.media_type,
-                    result.product_type,
-                    result.caption_text,
-                    result.taken_at.isoformat(),
-                    result.thumbnail_url,
-                    result.location.pk if result.location else None,
-                    result.location.name if result.location else None,
-                    result.like_count,
-                    result.comment_count,
-                    bool(result.resources),
-                    (
-                        ",".join(str(r.pk) for r in result.resources)
-                        if result.resources
-                        else None
-                    ),
-                    (
-                        ",".join(r.thumbnail_url for r in result.resources)
-                        if result.resources
-                        else None
-                    ),
-                    "active",
-                ),
+                timestamp = datetime.now().isoformat()
+
+            # Get media URL
+            media_url = safe_get_attr(result, 'thumbnail_url', 'url', 'media_url')
+
+            # Get location info
+            location = safe_get_attr(result, 'location')
+            location_pk = location.pk if location else None
+            location_name = location.name if location else None
+
+            # Get resources (for album posts)
+            resources = safe_get_attr(result, 'resources', 'carousel_media', default=[])
+            
+            # Common values for insert/update
+            values = (
+                safe_get_attr(result, 'media_type', default=1),
+                safe_get_attr(result, 'product_type', default=''),
+                safe_get_attr(result, 'caption_text', 'caption', default=''),
+                timestamp,
+                media_url,
+                location_pk,
+                location_name,
+                safe_get_attr(result, 'like_count', default=0),
+                safe_get_attr(result, 'comment_count', default=0),
+                bool(resources),
+                ",".join(str(safe_get_attr(r, 'pk', 'id')) for r in resources) if resources else None,
+                ",".join(safe_get_attr(r, 'thumbnail_url', 'url', default='') for r in resources) if resources else None,
+                "active",
+                content_id,
             )
+
+            try:
+                if existing:
+                    logger.info(f"Updating existing post record for content_id: {content_id}")
+                    cursor.execute(
+                        """
+                        UPDATE posts SET
+                            media_type = ?, product_type = ?, caption = ?, timestamp = ?,
+                            media_url = ?, location_pk = ?, location_name = ?, like_count = ?,
+                            comment_count = ?, is_album = ?, album_media_ids = ?,
+                            album_media_urls = ?, status = ?
+                        WHERE content_id = ?
+                        """,
+                        values,
+                    )
+                else:
+                    logger.info(f"Inserting new post record for content_id: {content_id}")
+                    cursor.execute(
+                        """
+                        INSERT INTO posts (
+                            media_type, product_type, caption, timestamp,
+                            media_url, location_pk, location_name, like_count, comment_count,
+                            is_album, album_media_ids, album_media_urls, status, content_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        values,
+                    )
+            except sqlite3.Error as e:
+                logger.error(f"Database error while updating posts table: {e}")
+                raise
 
             # Verify the update/insert
             cursor.execute("SELECT * FROM posts WHERE content_id = ?", (content_id,))
             if cursor.fetchone():
-                logger.info(
-                    f"Successfully updated posts table for content_id: {content_id}"
-                )
+                logger.info(f"Successfully updated posts table for content_id: {content_id}")
             else:
                 raise Exception("Failed to verify post record after update/insert")
 
-        except sqlite3.Error as e:
-            logger.error(f"SQLite error updating posts table: {e}")
-            raise
         except Exception as e:
             logger.error(f"Error updating posts table: {e}")
-            raise
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Log error but don't raise - allow the main process to continue
 
-    def _update_reels_table(
-        self, cursor: sqlite3.Cursor, content_id: int, result: Media
-    ) -> None:
-        """Update the reels table with the API response data."""
+    def _update_reels_table(self, cursor: sqlite3.Cursor, content_id: int, result: Media) -> None:
+        """
+        Update the reels table with the API response data.
+        
+        Args:
+            cursor (sqlite3.Cursor): Database cursor
+            content_id (int): Content ID from the content table
+            result (Media): Instagram API response object from reel upload
+        """
         try:
-            # First check if a record already exists
             cursor.execute(
                 "SELECT reel_id FROM reels WHERE content_id = ?", (content_id,)
             )
             existing = cursor.fetchone()
 
+            def safe_get_attr(obj, *attrs, default=None):
+                """Try multiple attribute names, return first found or default."""
+                for attr in attrs:
+                    value = getattr(obj, attr, None)
+                    if value is not None:
+                        return value
+                return default
+
+            # Get timestamp - Instagrapi uses taken_at
+            taken_at = safe_get_attr(result, 'taken_at')
+            timestamp = taken_at.isoformat() if taken_at else datetime.now().isoformat()
+
+            # Get location info - Instagrapi uses location object
+            location = safe_get_attr(result, 'location')
+            
+            # Get media URLs - Instagrapi provides video_url for reels
+            media_url = safe_get_attr(result, 'video_url')
+            thumbnail_url = safe_get_attr(result, 'thumbnail_url')
+
+            # Get audio info - Instagrapi provides music_info for reels
+            music_info = safe_get_attr(result, 'music_info', 'audio_metadata')
+            audio_track = json.dumps(music_info) if music_info else ''
+
+            # Get clips metadata - Instagrapi provides clips_metadata
+            clips_metadata = safe_get_attr(result, 'clips_metadata')
+            effects = json.dumps(clips_metadata) if clips_metadata else ''
+
+            # Get duration - Instagrapi provides video_duration
+            duration = safe_get_attr(result, 'video_duration', default=0)
+
+            values = (
+                safe_get_attr(result, 'caption_text', 'caption', default=''),
+                timestamp,
+                media_url,
+                thumbnail_url,
+                location.pk if location else None,
+                location.name if location else None,
+                safe_get_attr(result, 'like_count', default=0),
+                safe_get_attr(result, 'comment_count', default=0),
+                audio_track,
+                effects,
+                duration,
+                "active",
+                content_id,
+            )
+
             if existing:
-                logger.info(
-                    f"Updating existing reel record for content_id: {content_id}"
-                )
+                logger.info(f"Updating existing reel record for content_id: {content_id}")
                 cursor.execute(
                     """
                     UPDATE reels SET
                         caption = ?, timestamp = ?, media_url = ?, thumbnail_url = ?,
                         location_pk = ?, location_name = ?, like_count = ?,
-                        comment_count = ?, status = ?
+                        comment_count = ?, audio_track = ?, effects = ?, duration = ?,
+                        status = ?
                     WHERE content_id = ?
                     """,
-                    (
-                        result.caption_text,
-                        result.taken_at.isoformat(),
-                        result.video_url,
-                        result.thumbnail_url,
-                        result.location.pk if result.location else None,
-                        result.location.name if result.location else None,
-                        result.like_count,
-                        result.comment_count,
-                        "active",
-                        content_id,
-                    ),
+                    values,
                 )
             else:
                 logger.info(f"Inserting new reel record for content_id: {content_id}")
                 cursor.execute(
                     """
                     INSERT INTO reels (
-                        content_id, caption, timestamp, media_url, thumbnail_url,
-                        location_pk, location_name, like_count, comment_count, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        caption, timestamp, media_url, thumbnail_url,
+                        location_pk, location_name, like_count, comment_count,
+                        audio_track, effects, duration, status, content_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (
-                        content_id,
-                        result.caption_text,
-                        result.taken_at.isoformat(),
-                        result.video_url,
-                        result.thumbnail_url,
-                        result.location.pk if result.location else None,
-                        result.location.name if result.location else None,
-                        result.like_count,
-                        result.comment_count,
-                        "active",
-                    ),
+                    values,
                 )
 
             # Verify the update/insert
             cursor.execute("SELECT * FROM reels WHERE content_id = ?", (content_id,))
             if cursor.fetchone():
-                logger.info(
-                    f"Successfully updated reels table for content_id: {content_id}"
-                )
+                logger.info(f"Successfully updated reels table for content_id: {content_id}")
             else:
                 raise Exception("Failed to verify reel record after update/insert")
 
-        except sqlite3.Error as e:
-            logger.error(f"SQLite error updating reels table: {e}")
-            raise
         except Exception as e:
             logger.error(f"Error updating reels table: {e}")
-            raise
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Log error but don't raise - allow the main process to continue
 
-    def _update_stories_table(
-        self, cursor: sqlite3.Cursor, content_id: int, result: Media
-    ) -> None:
-        """Update the stories table with the API response data."""
+    def _update_stories_table(self, cursor: sqlite3.Cursor, content_id: int, result: Media) -> None:
+        """
+        Update the stories table with the API response data.
+        
+        Args:
+            cursor (sqlite3.Cursor): Database cursor
+            content_id (int): Content ID from the content table
+            result (Media): Instagram API response object from story upload
+        """
         try:
+            def safe_get_attr(obj, *attrs, default=None):
+                """Try multiple attribute names, return first found or default."""
+                for attr in attrs:
+                    value = getattr(obj, attr, None)
+                    if value is not None:
+                        return value
+                return default
+
+            # Get mentions
+            mentions = safe_get_attr(result, 'mentions', default=[])
+            mention_usernames = ",".join(
+                mention.user.username for mention in mentions
+            ) if mentions else None
+
+            # Get hashtags
+            hashtags = safe_get_attr(result, 'hashtags', default=[])
+            hashtag_names = ",".join(
+                f"#{tag.name}" for tag in hashtags
+            ) if hashtags else None
+
+            # Get story link
+            story_cta = safe_get_attr(result, 'story_cta', default=[])
+            link = story_cta[0].url if story_cta else None
+
+            # Get media URL based on type
+            media_type = safe_get_attr(result, 'media_type', default=1)
+            media_url = (
+                safe_get_attr(result, 'video_url') if media_type == 2 
+                else safe_get_attr(result, 'thumbnail_url')
+            )
+
             cursor.execute(
                 """
                 INSERT INTO stories (
@@ -673,51 +741,41 @@ class IgContentPublisher:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    str(result.pk),
+                    str(safe_get_attr(result, 'pk', 'id')),
                     content_id,
-                    result.code,
-                    result.taken_at.isoformat(),
-                    (
-                        result.video_url
-                        if result.media_type == 2
-                        else result.thumbnail_url
-                    ),
-                    result.caption_text,
-                    (
-                        ",".join(mention.user.username for mention in result.mentions)
-                        if result.mentions
-                        else None
-                    ),
-                    result.location.pk if result.location else None,
-                    (
-                        ",".join(f"#{tag.name}" for tag in result.hashtags)
-                        if result.hashtags
-                        else None
-                    ),
-                    result.story_cta[0].url if result.story_cta else None,
+                    safe_get_attr(result, 'code'),
+                    safe_get_attr(result, 'taken_at').isoformat(),
+                    media_url,
+                    safe_get_attr(result, 'caption_text', 'caption', default=''),
+                    mention_usernames,
+                    safe_get_attr(result, 'location.pk') if safe_get_attr(result, 'location') else None,
+                    hashtag_names,
+                    link,
                 ),
             )
-            logger.info(
-                f"Successfully updated stories table for content_id: {content_id}"
-            )
-        except sqlite3.Error as e:
+            logger.info(f"Successfully updated stories table for content_id: {content_id}")
+
+        except Exception as e:
             logger.error(f"Error updating stories table: {e}")
-            raise
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Log error but don't raise - allow the main process to continue
 
     def publish_story(self, content: Dict[str, Any]) -> Optional[Media]:
         """
         Publish a story to Instagram using Instagrapi v2.1.2.
-        
+
         Args:
             content (Dict[str, Any]): Content data from database
-            
+
         Returns:
             Optional[Media]: Published story media object if successful, None otherwise
         """
         temp_file = None
         try:
             # Get media file
-            media_paths = content["media_paths"].split(",") if content["media_paths"] else []
+            media_paths = (
+                content["media_paths"].split(",") if content["media_paths"] else []
+            )
             if not media_paths:
                 raise ValueError("No media file provided for story")
 
@@ -731,24 +789,24 @@ class IgContentPublisher:
                 for mention in content["mentions"].split():
                     username = mention.strip("@")
                     try:
-                        user_info = self.ig_client.client.user_info_by_username(username)
+                        user_info = self.ig_client.client.user_info_by_username(
+                            username
+                        )
                         if user_info:
                             user_short = UserShort(
                                 pk=user_info.pk,
                                 username=user_info.username,
-                                full_name=user_info.full_name
+                                full_name=user_info.full_name,
                             )
                             story_mentions.append(
                                 StoryMention(
-                                    user=user_short,
-                                    x=0.5,
-                                    y=0.5,
-                                    width=0.5,
-                                    height=0.1
+                                    user=user_short, x=0.5, y=0.5, width=0.5, height=0.1
                                 )
                             )
                     except Exception as e:
-                        logger.warning(f"Failed to process mention for user {username}: {e}")
+                        logger.warning(
+                            f"Failed to process mention for user {username}: {e}"
+                        )
 
             # Prepare hashtags
             story_hashtags = []
@@ -761,7 +819,7 @@ class IgContentPublisher:
                             hashtag = Hashtag(
                                 name=clean_tag,
                                 id=hashtag_info.id,
-                                media_count=hashtag_info.media_count
+                                media_count=hashtag_info.media_count,
                             )
                             story_hashtags.append(
                                 StoryHashtag(
@@ -769,7 +827,7 @@ class IgContentPublisher:
                                     x=0.5,
                                     y=0.3 + (idx * 0.1),
                                     width=0.5,
-                                    height=0.1
+                                    height=0.1,
                                 )
                             )
                     except Exception as e:
@@ -788,10 +846,7 @@ class IgContentPublisher:
             time.sleep(2)
 
             # Prepare upload parameters
-            upload_kwargs = {
-                "path": temp_file,
-                "caption": content.get("caption", "")
-            }
+            upload_kwargs = {"path": temp_file, "caption": content.get("caption", "")}
 
             # Only add optional parameters if they exist
             if story_mentions:
@@ -807,57 +862,79 @@ class IgContentPublisher:
             elif content["media_type"] == "video":
                 result = self.post_manager.client.video_upload_to_story(**upload_kwargs)
             else:
-                raise ValueError(f"Unsupported media type for story: {content['media_type']}")
+                raise ValueError(
+                    f"Unsupported media type for story: {content['media_type']}"
+                )
 
             if result:
                 logger.info(f"Successfully published story. Story ID: {result.pk}")
-                
+
                 # Update stories table in database
                 try:
                     with sqlite3.connect(self.db_path) as conn:
                         cursor = conn.cursor()
-                        
+
                         # Insert story data into stories table
-                        cursor.execute("""
+                        cursor.execute(
+                            """
                             INSERT INTO stories (
                                 story_id, content_id, code, taken_at, reel_url,
                                 caption, mentions, location_id, hashtags, link
                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            str(result.pk),
-                            content["content_id"],
-                            result.code,
-                            result.taken_at.isoformat(),
-                            result.video_url if content["media_type"] == "video" else result.thumbnail_url,
-                            content.get("caption", ""),
-                            content.get("mentions", ""),
-                            content.get("location_id"),
-                            content.get("hashtags", ""),
-                            content.get("link")
-                        ))
-                        
+                        """,
+                            (
+                                str(result.pk),
+                                content["content_id"],
+                                result.code,
+                                result.taken_at.isoformat(),
+                                (
+                                    result.video_url
+                                    if content["media_type"] == "video"
+                                    else result.thumbnail_url
+                                ),
+                                content.get("caption", ""),
+                                content.get("mentions", ""),
+                                content.get("location_id"),
+                                content.get("hashtags", ""),
+                                content.get("link"),
+                            ),
+                        )
+
                         # Update content status to published
-                        cursor.execute("""
+                        cursor.execute(
+                            """
                             UPDATE content 
                             SET status = 'published' 
                             WHERE content_id = ?
-                        """, (content["content_id"],))
-                        
-                        conn.commit()
-                        logger.info(f"Successfully updated stories table for content_id: {content['content_id']}")
-                
-            except sqlite3.Error as e:
-                logger.error(f"Database error while updating stories table: {e}")
-                logger.error(traceback.format_exc())
-                
-                return result
-            else:
-                logger.error("Failed to publish story - no result returned")
-                return None
+                        """,
+                            (content["content_id"],),
+                        )
 
+                        conn.commit()
+                        logger.info(
+                            f"Successfully updated stories table for content_id: {content['content_id']}"
+                        )
+
+                except sqlite3.Error as e:
+                    logger.error(f"Database error while updating stories table: {e}")
+                    logger.error(traceback.format_exc())
+                    raise
+                except Exception as e:
+                    logger.error(f"Error publishing story: {str(e)}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    return None
+                finally:
+                    if temp_file and os.path.exists(temp_file):
+                        try:
+                            os.remove(temp_file)
+                            logger.info(f"Cleaned up temporary file: {temp_file}")
+                        except Exception as e:
+                            logger.warning(
+                                f"Error cleaning up temporary file {temp_file}: {e}"
+                            )
+                    return result
         except Exception as e:
-            logger.error(f"Error publishing story: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Error publishing story: {e}")
             return None
         finally:
             if temp_file and os.path.exists(temp_file):
@@ -866,11 +943,17 @@ class IgContentPublisher:
                     logger.info(f"Cleaned up temporary file: {temp_file}")
                 except Exception as e:
                     logger.warning(f"Error cleaning up temporary file {temp_file}: {e}")
+            return result
 
     def process_pending_content(self) -> None:
         """Process all pending content that is due for publication."""
         pending_content = self.get_pending_content()
         logger.info(f"Found {len(pending_content)} pending items to publish")
+
+        # If no pending content, return immediately
+        if not pending_content:
+            logger.info("No pending content to process")
+            return
 
         for i, content in enumerate(pending_content):
             try:
@@ -878,9 +961,7 @@ class IgContentPublisher:
                 success = self.publish_content(content)
 
                 if success:
-                    logger.info(
-                        f"Successfully published content {content['content_id']}"
-                    )
+                    logger.info(f"Successfully published content {content['content_id']}")
                 else:
                     logger.error(f"Failed to publish content {content['content_id']}")
 
@@ -888,11 +969,9 @@ class IgContentPublisher:
                 logger.error(f"Error processing content {content['content_id']}: {e}")
 
             finally:
-                # Always ask to continue, whether success, failure, or error
-                if i < len(pending_content) - 1:  # Don't ask after the last item
-                    continue_response = input(
-                        "\nDo you want to process the next content? (y/N/q): "
-                    ).lower()
+                # Only ask to continue if there are more items
+                if i < len(pending_content) - 1:
+                    continue_response = input("\nDo you want to process the next content? (y/N/q): ").lower()
                     if continue_response == "q":
                         logger.info("Exiting program...")
                         return
@@ -901,57 +980,62 @@ class IgContentPublisher:
                         return
 
     def update_google_sheet_status(self, content: Dict[str, Any], status: str) -> None:
-        """
-        Update the status in Google Sheet for a published/failed content.
-
-        Args:
-            content (Dict[str, Any]): The content data including gs_row_number
-            status (str): The status to update ('published' or 'failed')
-        """
+        """Update the status in Google Sheet for a published/failed content."""
         try:
             if not content.get("gs_row_number"):
                 logger.warning(
-                    f"No Google Sheet row number for content_id: {content['content_id']}"
+                    "No Google Sheet row number for content_id: %s",
+                    content["content_id"],
                 )
                 return
 
-            # Get the spreadsheet ID from the GoogleSheetsHandler
-            spreadsheet_id = self.gs_handler.spreadsheet_id
-            if not spreadsheet_id:
-                logger.error("No spreadsheet ID configured")
+            # Get headers to find correct columns
+            headers = self.gs_handler.read_spreadsheet(
+                self.gs_handler.spreadsheet_id, "'Ig Origin Data'!1:1"
+            )[0]
+
+            # Find required column indices
+            try:
+                status_col = self._number_to_column_letter(headers.index("status") + 1)
+                timestamp_col = self._number_to_column_letter(
+                    headers.index("publish_timestamp") + 1
+                )
+            except ValueError as e:
+                logger.error("Required column not found in header: %s", str(e))
                 return
 
-            # Prepare the update data
             row_number = content["gs_row_number"]
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            # Update status column (assuming it's column N)
-            status_range = f"'Ig Origin Data'!N{row_number}"
-            status_value = [["Y" if status == "published" else "Failed"]]
-
-            # Update timestamp column (assuming it's column O)
-            timestamp_range = f"'Ig Origin Data'!O{row_number}"
-            timestamp_value = [[current_time]]
-
-            # Batch update the sheet
+            # Prepare batch update
             batch_data = [
-                {"range": status_range, "values": status_value},
-                {"range": timestamp_range, "values": timestamp_value},
+                {
+                    "range": f"'Ig Origin Data'!{status_col}{row_number}",
+                    "values": [["Y" if status == "published" else "Failed"]],
+                },
+                {
+                    "range": f"'Ig Origin Data'!{timestamp_col}{row_number}",
+                    "values": [[current_time]],
+                },
             ]
 
-            result = self.gs_handler.batch_update(spreadsheet_id, batch_data)
+            result = self.gs_handler.batch_update(
+                self.gs_handler.spreadsheet_id, batch_data
+            )
             if result:
                 logger.info(
-                    f"Updated Google Sheet status for content_id {content['content_id']} to {status}"
+                    "Updated Google Sheet status for content_id %s to %s",
+                    content["content_id"],
+                    status,
                 )
             else:
                 logger.error(
-                    f"Failed to update Google Sheet for content_id {content['content_id']}"
+                    "Failed to update Google Sheet for content_id %s",
+                    content["content_id"],
                 )
 
         except Exception as e:
-            logger.error(f"Error updating Google Sheet status: {e}")
-            logger.error(traceback.format_exc())
+            logger.error("Error updating Google Sheet status: %s", str(e))
 
     def _number_to_column_letter(self, n: int) -> str:
         """Convert a column number to column letter (1 = A, 27 = AA, etc.)."""

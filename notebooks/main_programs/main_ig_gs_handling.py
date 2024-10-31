@@ -41,25 +41,25 @@ def main():
         logger.error("Error during authentication and setup: %s", str(e))
         return
 
-    try:
-        logger.info("Updating location IDs")
-        handler.update_location_ids()
-        logger.info("Location ID update complete")
-    except Exception as e:
-        logger.error("Error updating location IDs: %s", str(e))
+    # try:
+    #     logger.info("Updating location IDs")
+    #     handler.update_location_ids()
+    #     logger.info("Location ID update complete")
+    # except Exception as e:
+    #     logger.error("Error updating location IDs: %s", str(e))
 
-    try:
-        logger.info("Updating music track IDs")
-        handler.update_music_track_ids()
-        logger.info("Music track ID update complete")
-    except Exception as e:
-        logger.error("Error updating music track IDs: %s", str(e))
-    try:
-        logger.info("Updating media paths")
-        handler.update_media_paths()
-        logger.info("Media path update complete")
-    except Exception as e:
-        logger.error("Error updating media paths: %s", str(e))
+    # try:
+    #     logger.info("Updating music track IDs")
+    #     handler.update_music_track_ids()
+    #     logger.info("Music track ID update complete")
+    # except Exception as e:
+    #     logger.error("Error updating music track IDs: %s", str(e))
+    # try:
+    #     logger.info("Updating media paths")
+    #     handler.update_media_paths()
+    #     logger.info("Media path update complete")
+    # except Exception as e:
+    #     logger.error("Error updating media paths: %s", str(e))
 
     try:
         logger.info("Syncing Google Sheet with SQLite database")

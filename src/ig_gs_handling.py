@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Optional
+from typing import Optional, List
 from google_sheets_handler import GoogleSheetsHandler
 from ig_utils import IgUtils, get_db_connection
 from ig_client import IgClient
@@ -87,43 +87,46 @@ class IgGSHandling:
     def update_location_ids(self):
         """Update location IDs for rows with location_str but no location_id."""
         logger.info("Updating location IDs...")
-        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:S")
-        if not data:
-            logger.error("Failed to read spreadsheet data")
-            return
+        try:
+            data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:S")
+            if not data:
+                logger.error("Failed to read spreadsheet data")
+                return
 
-        header = data[0]
-        location_str_index = header.index("location_str")
-        location_id_index = header.index("location_id")
-        content_id_index = header.index("content_id")
+            header = data[0]
+            try:
+                location_str_index = header.index("location_str")
+                location_id_index = header.index("location_id")
+                content_id_index = header.index("content_id")
+            except ValueError as e:
+                logger.error("Required column not found in header: %s", str(e))
+                return
 
-        updates = []
-        for row_index, row in enumerate(data[1:], start=2):
-            if row[content_id_index]:  # Skip published content
-                continue
-            if row[location_str_index] and not row[location_id_index]:
-                print(
-                    f"\n\n LOCATION STR: {row[location_str_index]} ---- on ROW: {row_index} \n\n"
-                )
-                locations = self.ig_utils.get_top_locations_by_name(
-                    row[location_str_index]
-                )
-                if locations:
-                    location_id = locations[0].pk
-                    print(f"\n\n LOCATION ID: {location_id} \n\n")
-                    updates.append(
-                        {"range": f"J{row_index}", "values": [[location_id]]}
-                    )
-                    logger.info(
-                        f"Updated location ID for row {row_index}: {location_id}"
-                    )
+            # Convert location_id_index to column letter
+            location_id_col = self._number_to_column_letter(location_id_index + 1)
+            
+            updates = []
+            for row_index, row in enumerate(data[1:], start=2):
+                if row[content_id_index]:  # Skip published content
+                    continue
+                if row[location_str_index] and not row[location_id_index]:
+                    locations = self.ig_utils.get_top_locations_by_name(row[location_str_index])
+                    if locations:
+                        location_id = locations[0].pk
+                        updates.append({
+                            "range": f"{location_id_col}{row_index}",
+                            "values": [[location_id]]
+                        })
+                        logger.info("Updated location ID for row %d: %s", row_index, location_id)
 
-        if updates:
-            print("\n\n LOCATION IDS UPDATES", updates, "\n\n")
-            self.gs_handler.batch_update(self.spreadsheet_id, updates)
-            logger.info(f"Updated {len(updates)} location IDs")
-        else:
-            logger.info("No location IDs to update")
+            if updates:
+                self.gs_handler.batch_update(self.spreadsheet_id, updates)
+                logger.info("Updated %d location IDs", len(updates))
+            else:
+                logger.info("No location IDs to update")
+            
+        except Exception as e:
+            logger.error("Error updating location IDs: %s", str(e))
 
     def update_music_track_ids(self):
         """Update music track IDs for rows with music_reference but no music_track_id."""
@@ -134,9 +137,16 @@ class IgGSHandling:
             return
 
         header = data[0]
-        music_reference_index = header.index("music_reference")
-        music_track_id_index = header.index("music_track_id")
-        content_id_index = header.index("content_id")
+        try:
+            music_reference_index = header.index("music_reference")
+            music_track_id_index = header.index("music_track_id")
+            content_id_index = header.index("content_id")
+        except ValueError as e:
+            logger.error("Required column not found in header: %s", str(e))
+            return
+
+        # Convert music_track_id_index to column letter
+        music_track_id_col = self._number_to_column_letter(music_track_id_index + 1)
 
         updates = []
         for row_index, row in enumerate(data[1:], start=2):
@@ -148,7 +158,7 @@ class IgGSHandling:
                     track = random.choice(tracks[:3])  # Random selection from top 3
                     music_track_id = track.id
                     updates.append(
-                        {"range": f"L{row_index}", "values": [[music_track_id]]}
+                        {"range": f"{music_track_id_col}{row_index}", "values": [[music_track_id]]}
                     )
                     logger.info(
                         f"Updated music track ID for row {row_index}: {music_track_id}"
@@ -169,21 +179,23 @@ class IgGSHandling:
             return
 
         header = data[0]
-        media_file_names_index = header.index("media_file_names")
-        media_paths_index = header.index("media_paths")
-        content_id_index = header.index("content_id")
-        print(f"MEDIA FILE NAMES INDEX: {media_file_names_index}")
-        print(f"MEDIA PATHS INDEX: {media_paths_index}")
-        print(f"CONTENT ID INDEX: {content_id_index}")
+        try:
+            media_file_names_index = header.index("media_file_names")
+            media_paths_index = header.index("media_paths")
+            content_id_index = header.index("content_id")
+        except ValueError as e:
+            logger.error("Required column not found in header: %s", str(e))
+            return
+
+        # Convert media_paths_index to column letter
+        media_paths_col = self._number_to_column_letter(media_paths_index + 1)
 
         updates = []
         for row_index, row in enumerate(data[1:], start=2):
-            print(f"\n ROW: {row}    ROW INDEX: {row_index} \n")
             if row[content_id_index]:  # Skip published content
                 continue
             if row[media_file_names_index] and not row[media_paths_index]:
                 file_names = row[media_file_names_index].split(",")
-                print(f"\n\n FILE NAMES: {file_names} \n\n")
                 file_ids = []
                 for file_name in file_names:
                     file_id = self.gs_handler.find_file_id(
@@ -192,17 +204,15 @@ class IgGSHandling:
                     if file_id:
                         file_ids.append(file_id)
                 if file_ids:
-                    print(f"\n\n FILE IDS: {file_ids} \n\n")
                     media_paths = ",".join(file_ids)
                     updates.append(
-                        {"range": f"N{row_index}", "values": [[media_paths]]}
+                        {"range": f"{media_paths_col}{row_index}", "values": [[media_paths]]}
                     )
                     logger.info(
                         f"Updated media paths for row {row_index}: {media_paths}"
                     )
 
         if updates:
-            print(updates)
             self.gs_handler.batch_update(self.spreadsheet_id, updates)
             logger.info(f"Updated {len(updates)} media paths")
         else:
@@ -236,6 +246,17 @@ class IgGSHandling:
             int: The generated content_id from the database.
         """
         print("INSERTING INTO DB", row, "\n")
+        
+        # Process mentions to ensure @ symbol
+        mentions = row.get("mentions", "")
+        if mentions:
+            # Split mentions, add @ if needed, and rejoin
+            processed_mentions = " ".join(
+                f"@{mention.lstrip('@')}" for mention in mentions.split()
+            )
+        else:
+            processed_mentions = ""
+
         cursor = self.db_connection.cursor()
         cursor.execute(
             """
@@ -252,7 +273,7 @@ class IgGSHandling:
                 row.get("title"),
                 row.get("caption"),
                 row.get("hashtags"),
-                row.get("mentions"),
+                processed_mentions,  # Use processed mentions instead of raw mentions
                 row.get("location_id"),
                 row.get("music_track_id"),
                 row.get("media_file_names"),
@@ -266,4 +287,45 @@ class IgGSHandling:
         )
         self.db_connection.commit()
         return cursor.lastrowid
+
+    def _number_to_column_letter(self, n: int) -> str:
+        """
+        Convert a column number to Excel-style column letter (A, B, C, ... Z, AA, AB, etc.)
+        
+        Args:
+            n (int): The column number (1-based)
+            
+        Returns:
+            str: The Excel-style column letter
+        """
+        string = ""
+        while n > 0:
+            n, remainder = divmod(n - 1, 26)
+            string = chr(65 + remainder) + string
+        return string
+
+    def update_content_ids(self, content_ids: List[int], row_indices: List[int]) -> None:
+        """
+        Update content IDs in the Google Sheet
+        
+        Args:
+            content_ids (List[int]): List of content IDs to update
+            row_indices (List[int]): List of corresponding row indices
+        """
+        try:
+            # Get the content ID column (should be column B or 2)
+            content_id_column = self._number_to_column_letter(2)  # Convert to 'B'
+            
+            batch_data = []
+            for content_id, row_idx in zip(content_ids, row_indices):
+                range_name = f"'Ig Origin Data'!{content_id_column}{row_idx}"
+                batch_data.append({
+                    'range': range_name,
+                    'values': [[str(content_id)]]
+                })
+            
+            self.gs_handler.batch_update_values(batch_data)
+            logger.info('Updated %d content IDs in column %s', len(content_ids), content_id_column)
+        except Exception as e:
+            logger.error('Error updating content IDs: %s', str(e))
 
