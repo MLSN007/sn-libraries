@@ -20,6 +20,7 @@ import shutil
 from pathlib import Path
 import traceback
 import json
+import random
 
 from ig_client import IgClient
 from ig_post_manager import IgPostManager
@@ -605,7 +606,7 @@ class IgContentPublisher:
                 safe_get_attr(result, "comment_count", default=0),
                 bool(resources),
                 (
-                    ",".join(str(safe_get_attr(r, "pk", "id")) for r in resources)
+                    ",".join(str(safe_get_attr(r, "pk", "id")) for r in resources
                     if resources
                     else None
                 ),
@@ -1039,8 +1040,67 @@ class IgContentPublisher:
                     logger.warning(f"Error cleaning up temporary file {temp_file}: {e}")
             return result
 
+    def verify_instagram_health(self) -> bool:
+        """
+        Verify Instagram session health and check for potential IP/automation flags.
+        
+        Returns:
+            bool: True if everything is healthy, False otherwise
+        """
+        try:
+            logger.info("Verifying Instagram session and IP health...")
+            
+            # Check if session is valid
+            if not self.ig_client.validate_session():
+                logger.error("❌ Instagram session is invalid")
+                return False
+
+            # Check for IP-related issues by attempting some safe operations
+            try:
+                # Try to fetch own profile - should be fast and safe
+                user_id = self.ig_client.client.user_id
+                self.ig_client.client.user_info(user_id)
+                
+                # Try to fetch timeline feed - good indicator of IP status
+                self.ig_client.client.feed_timeline()
+                
+                # Try to fetch reels tray - another good health indicator
+                self.ig_client.client.feed_reels_tray()
+                
+                logger.info("✅ IP checks passed successfully")
+                return True
+                
+            except Exception as e:
+                error_message = str(e).lower()
+                
+                # Check for common IP/automation detection indicators
+                if "feedback_required" in error_message:
+                    logger.error("❌ Instagram has flagged potential automation")
+                    return False
+                elif "challenge_required" in error_message:
+                    logger.error("❌ Instagram requires verification challenge")
+                    return False
+                elif "login_required" in error_message:
+                    logger.error("❌ Session has expired")
+                    return False
+                elif "rate_limit" in error_message:
+                    logger.error("❌ Rate limit hit - IP may be flagged")
+                    return False
+                else:
+                    logger.error(f"❌ Unknown Instagram error: {e}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Error verifying Instagram health: {e}")
+            return False
+
     def process_pending_content(self) -> None:
         """Process all pending content that is due for publication."""
+        # First verify Instagram health
+        if not self.verify_instagram_health():
+            logger.error("Instagram health check failed. Stopping process.")
+            return
+
         pending_content = self.get_pending_content()
         logger.info(f"Found {len(pending_content)} pending items to publish")
 
@@ -1052,12 +1112,22 @@ class IgContentPublisher:
         for i, content in enumerate(pending_content):
             try:
                 logger.info(f"\nProcessing content {i+1} of {len(pending_content)}")
+                
+                # Re-verify Instagram health before each post
+                if not self.verify_instagram_health():
+                    logger.error("Instagram health check failed. Stopping process.")
+                    return
+                
+                # Add random delay between posts (2-5 minutes)
+                if i > 0:  # Don't delay before first post
+                    delay = random.uniform(120, 300)
+                    logger.info(f"Adding random delay of {delay:.1f} seconds...")
+                    time.sleep(delay)
+                
                 success = self.publish_content(content)
 
                 if success:
-                    logger.info(
-                        f"Successfully published content {content['content_id']}"
-                    )
+                    logger.info(f"Successfully published content {content['content_id']}")
                 else:
                     logger.error(f"Failed to publish content {content['content_id']}")
 
@@ -1067,9 +1137,7 @@ class IgContentPublisher:
             finally:
                 # Only ask to continue if there are more items
                 if i < len(pending_content) - 1:
-                    continue_response = input(
-                        "\nDo you want to process the next content? (y/N/q): "
-                    ).lower()
+                    continue_response = input("\nDo you want to process the next content? (y/N/q): ").lower()
                     if continue_response == "q":
                         logger.info("Exiting program...")
                         return
@@ -1142,3 +1210,45 @@ class IgContentPublisher:
             n, remainder = divmod(n - 1, 26)
             result = chr(65 + remainder) + result
         return result
+
+    def _check_rate_limits(self) -> bool:
+        """Check if we're approaching Instagram's rate limits."""
+        try:
+            # Get the user's recent actions count
+            user_id = self.ig_client.client.user_id
+            user_feed = self.ig_client.client.user_feed(user_id)
+            
+            # Count recent posts (last 24 hours)
+            recent_posts = 0
+            now = datetime.now()
+            for post in user_feed:
+                if (now - post.taken_at).total_seconds() < 86400:  # 24 hours in seconds
+                    recent_posts += 1
+            
+            # Instagram's typical limits:
+            # - Max 25-30 posts per 24 hours
+            # - Max 100 actions per hour
+            if recent_posts >= 25:
+                logger.warning("⚠️ Approaching Instagram's daily post limit")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error checking rate limits: {e}")
+            return False
+
+    def _add_safe_delay(self) -> None:
+        """Add a randomized delay to avoid automation detection."""
+        base_delay = random.uniform(30, 60)  # Base delay between 30-60 seconds
+        
+        # Add extra delay based on time of day (more during night)
+        hour = datetime.now().hour
+        if 0 <= hour < 6:  # Night time
+            extra_delay = random.uniform(60, 120)
+        else:
+            extra_delay = random.uniform(15, 45)
+        
+        total_delay = base_delay + extra_delay
+        logger.info(f"Adding safety delay of {total_delay:.1f} seconds...")
+        time.sleep(total_delay)
