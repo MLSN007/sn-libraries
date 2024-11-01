@@ -1,14 +1,48 @@
+"""
+Error handling utilities for the Instagram automation project.
+"""
+
+from typing import Optional, Any
 import logging
-from typing import Callable, Any
 
-def setup_logging():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-def handle_error(func: Callable) -> Callable:
-    def wrapper(*args, **kwargs) -> Any:
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logging.error(f"Error in {func.__name__}: {str(e)}", exc_info=True)
-            raise
-    return wrapper
+class ErrorHandler:
+    """Handles errors and exceptions in the Instagram automation process."""
+
+    @staticmethod
+    def handle_error(error: Exception, context: Optional[str] = None) -> None:
+        """
+        Handle an error by logging it appropriately.
+
+        Args:
+            error (Exception): The error that occurred
+            context (Optional[str]): Additional context about where the error occurred
+        """
+        error_message = f"{str(error)}"
+        if context:
+            error_message = f"{context}: {error_message}"
+        
+        logger.error(error_message, exc_info=True)
+
+    @staticmethod
+    def log_warning(message: str, *args: Any) -> None:
+        """
+        Log a warning message.
+
+        Args:
+            message (str): The warning message
+            *args: Additional arguments for string formatting
+        """
+        logger.warning(message, *args)
+
+    @staticmethod
+    def log_error(message: str, *args: Any) -> None:
+        """
+        Log an error message.
+
+        Args:
+            message (str): The error message
+            *args: Additional arguments for string formatting
+        """
+        logger.error(message, *args)

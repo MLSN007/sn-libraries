@@ -80,8 +80,8 @@ class IgContentPublisher:
         self.folder_id = self.gs_handler.get_folder_id(folder_name)
         if self.folder_id:
             spreadsheet_name = f"{account_id} IG input table"
-            self.gs_handler.spreadsheet_id = self.gs_handler.find_file_id(
-                self.folder_id, spreadsheet_name
+            self.gs_handler.spreadsheet_id = self.gs_handler.get_file_id_by_name(
+                spreadsheet_name, self.folder_id
             )
             if not self.gs_handler.spreadsheet_id:
                 logger.error(f"Could not find spreadsheet: {spreadsheet_name}")
@@ -1344,3 +1344,8 @@ class IgContentPublisher:
         total_delay = base_delay + extra_delay
         logger.info(f"Adding safety delay of {total_delay:.1f} seconds...")
         time.sleep(total_delay)
+
+    def cleanup(self) -> None:
+        """Clean up resources before shutdown."""
+        # Add any cleanup logic here
+        logger.info("Cleaning up resources...")
