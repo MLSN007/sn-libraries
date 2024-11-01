@@ -1,34 +1,37 @@
 import warnings
+import logging
+import traceback
+from ig_gs_handling import IgGSHandling
+from html_filter import NoHTMLFilter
 
+# Suppress google auth warnings
 warnings.filterwarnings(
     "ignore", message="file_cache is unavailable when using oauth2client >= 4.0.0"
 )
-import logging
-from ig_gs_handling import IgGSHandling
 
+# Configure logging with our filter
 logging.basicConfig(
-    level=logging.DEBUG,  # Changed from INFO to DEBUG
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-logger = logging.getLogger(__name__)
 
+# Add filter to root logger
+logging.getLogger().addFilter(NoHTMLFilter())
+
+logger = logging.getLogger(__name__)
 # Set logging level for google_sheets_handler to DEBUG
 logging.getLogger("google_sheets_handler").setLevel(logging.DEBUG)
 
-
 def main():
-    # -------------------------------------------------------------------------
-    account_id = "JK"  # Replace with the actual account ID
-    # -------------------------------------------------------------------------
-    logger.info(
-        "Starting Instagram Google Sheets handling process for account: %s", account_id
-    )
+    account_id = "JK"
+    logger.info(f"Starting Instagram Google Sheets handling process for account: {account_id}")
 
     try:
         handler = IgGSHandling(account_id)
         logger.info("IgGSHandling instance created successfully")
     except Exception as e:
-        logger.error("Failed to create IgGSHandling instance: %s", str(e))
+        logger.error(f"Failed to create IgGSHandling instance: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return
 
     try:
@@ -38,38 +41,32 @@ def main():
             return
         logger.info("Authentication and setup successful")
     except Exception as e:
-        logger.error("Error during authentication and setup: %s", str(e))
+        logger.error(f"Error during authentication and setup: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return
 
-    # try:
-    #     logger.info("Updating location IDs")
-    #     handler.update_location_ids()
-    #     logger.info("Location ID update complete")
-    # except Exception as e:
-    #     logger.error("Error updating location IDs: %s", str(e))
+    # Uncomment and run these sections one at a time as needed
+    operations = {
+        # "update_location_ids": handler.update_location_ids,
+        # "update_music_track_ids": handler.update_music_track_ids,
+        # "update_media_paths": handler.update_media_paths,
+        "sync_google_sheet_with_db": handler.sync_google_sheet_with_db
+    }
 
-    # try:
-    #     logger.info("Updating music track IDs")
-    #     handler.update_music_track_ids()
-    #     logger.info("Music track ID update complete")
-    # except Exception as e:
-    #     logger.error("Error updating music track IDs: %s", str(e))
-    # try:
-    #     logger.info("Updating media paths")
-    #     handler.update_media_paths()
-    #     logger.info("Media path update complete")
-    # except Exception as e:
-    #     logger.error("Error updating media paths: %s", str(e))
-
-    try:
-        logger.info("Syncing Google Sheet with SQLite database")
-        handler.sync_google_sheet_with_db()
-        logger.info("Sync complete")
-    except Exception as e:
-        logger.error("Error during sync: %s", str(e))
+    for operation_name, operation_func in operations.items():
+        try:
+            logger.info(f"Starting {operation_name}...")
+            operation_func()
+            logger.info(f"Successfully completed {operation_name}")
+        except Exception as e:
+            logger.error(f"Error during {operation_name}: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Ask user if they want to continue with next operation
+            if input(f"\nContinue with remaining operations? (y/N): ").lower() != 'y':
+                logger.info("Stopping process as requested by user")
+                break
 
     logger.info("Instagram Google Sheets handling process completed")
-
 
 if __name__ == "__main__":
     main()

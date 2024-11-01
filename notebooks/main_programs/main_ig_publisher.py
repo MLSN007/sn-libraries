@@ -7,13 +7,17 @@ import argparse
 import sys
 from pathlib import Path
 
+from ig_content_publisher import IgContentPublisher
+from ig_client import IgClient
+from html_filter import NoHTMLFilter
+
 # Add the src directory to Python path
 src_path = str(Path(__file__).parent.parent.parent / "src")
 if src_path not in sys.path:
     sys.path.append(src_path)
 
-from ig_content_publisher import IgContentPublisher
-from ig_client import IgClient
+# Add filter to root logger
+logging.getLogger().addFilter(NoHTMLFilter())
 
 logging.basicConfig(
     level=logging.INFO,

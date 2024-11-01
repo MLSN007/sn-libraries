@@ -9,7 +9,7 @@ def create_tables():
     # -------------------------------------------------------------------------
     conn = sqlite3.connect(
         r"C:\Users\manue\Documents\GitHub007\sn-libraries\data\JK_ig.db"
-    )                         # Replace with your database name  # ------------------------
+    )  # Replace with your database name  # ------------------------
     # -------------------------------------------------------------------------
 
     cursor = conn.cursor()
@@ -34,6 +34,7 @@ def create_tables():
             publish_time TEXT,
             status TEXT,
             gs_row_number INTEGER
+            error_message (TEXT)
         )
     """
     )
@@ -61,7 +62,7 @@ def create_tables():
         )
     """
     )
-    
+
     # Create the 'reels' table
     cursor.execute(
         """
@@ -125,9 +126,15 @@ def create_tables():
     )
 
     # Create indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_posts_content_id ON posts (content_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_reels_content_id ON reels (content_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stories_content_id ON stories (content_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_posts_content_id ON posts (content_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_reels_content_id ON reels (content_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stories_content_id ON stories (content_id)"
+    )
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_status ON content (status)")
 
     conn.commit()

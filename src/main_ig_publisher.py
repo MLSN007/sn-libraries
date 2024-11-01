@@ -6,10 +6,22 @@ import logging
 import argparse
 from ig_content_publisher import IgContentPublisher
 
+# Add this filter class
+class NoHTMLFilter(logging.Filter):
+    def filter(self, record):
+        return not (record.msg.startswith('<') or 
+                   'script' in str(record.msg) or 
+                   'html' in str(record.msg).lower())
+
+# Modify the logging setup
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+# Add filter to root logger
+logging.getLogger().addFilter(NoHTMLFilter())
+
 logger = logging.getLogger(__name__)
 
 def main():

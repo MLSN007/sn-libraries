@@ -213,14 +213,15 @@ class IgContentPublisher:
                 temp_dir = tempfile.mkdtemp()
                 temp_file_path = Path(temp_dir) / f"temp_media_{file_id}"
 
-                request = self.gs_handler.drive_service.files().get_media(fileId=file_id)
+                # Get media content
+                request = self.gs_handler.drive_service.get_media(fileId=file_id)
 
-                # Get file metadata to determine extension
-                file_metadata = (
-                    self.gs_handler.drive_service.files()
-                    .get(fileId=file_id, fields="name")
-                    .execute()
-                )
+                # Get file metadata
+                file_metadata = self.gs_handler.drive_service.get(
+                    fileId=file_id, fields="name"
+                ).execute()
+
+                # Get file extension
                 file_extension = Path(file_metadata["name"]).suffix
                 temp_file_path = temp_file_path.with_suffix(file_extension)
 
@@ -230,9 +231,13 @@ class IgContentPublisher:
                     while not done:
                         status, done = downloader.next_chunk()
                         if status:
-                            logger.info(f"Download progress: {int(status.progress() * 100)}%")
+                            logger.info(
+                                f"Download progress: {int(status.progress() * 100)}%"
+                            )
 
-                logger.info(f"Successfully saved media to temporary file: {temp_file_path}")
+                logger.info(
+                    f"Successfully saved media to temporary file: {temp_file_path}"
+                )
                 return str(temp_file_path)
 
             except Exception as e:
@@ -243,6 +248,7 @@ class IgContentPublisher:
                     if temp_dir and os.path.exists(temp_dir):
                         # Close any open handles to the file
                         import gc
+
                         gc.collect()
                         time.sleep(1)  # Give time for handles to be released
                         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -269,17 +275,83 @@ class IgContentPublisher:
         Returns:
             bool: True if published successfully, False otherwise
         """
+        # First validate all required resources
+        try:
+            logger.info(f"Validating resources for content_id: {content['content_id']}")
+            
+            # Check required fields based on content type
+            required_fields = ['content_type', 'media_type', 'caption', 'media_paths']
+            if content['content_type'] == 'story':
+                # Add story-specific required fields
+                required_fields.extend(['mentions', 'hashtags'])
+            
+            missing_fields = [field for field in required_fields 
+                             if not content.get(field)]
+            if missing_fields:
+                logger.error(f"Missing required fields: {missing_fields}")
+                self.update_content_status(content['content_id'], 'failed', 
+                                         error=f"Missing required fields: {missing_fields}")
+                return False
+
+            # Validate media files first
+            media_paths = content["media_paths"].split(",") if content["media_paths"] else []
+            if not media_paths:
+                logger.error("No media files specified")
+                self.update_content_status(content['content_id'], 'failed', 
+                                         error="No media files specified")
+                return False
+
+            # Try to access each media file without downloading
+            for file_id in media_paths:
+                file_id = file_id.strip()
+                if not self.gs_handler.verify_file_exists(file_id):
+                    logger.error(f"Media file not accessible: {file_id}")
+                    self.update_content_status(content['content_id'], 'failed',
+                                             error=f"Media file not accessible: {file_id}")
+                    return False
+                logger.info(f"Verified access to media file: {file_id}")
+
+            # Validate location if provided
+            if content.get("location_id"):
+                try:
+                    location = Location(
+                        pk=content["location_id"],
+                        name=content.get("location_name", "")
+                    )
+                    logger.info(f"Validated location: {location.name}")
+                except Exception as e:
+                    logger.error(f"Invalid location data: {e}")
+                    self.update_content_status(content['content_id'], 'failed',
+                                             error="Invalid location data")
+                    return False
+
+            # All validations passed, now proceed with publishing
+            logger.info("All resources validated successfully")
+            
+            # Rest of the publishing code...
+            
+        except Exception as e:
+            logger.error(f"Error validating content {content['content_id']}: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            self.update_content_status(content['content_id'], 'failed',
+                                     error=f"Validation error: {str(e)}")
+            return False
+
         temp_files = []  # Keep track of temporary files
 
         try:
             # Validate session before publishing
             if not self.ig_client.validate_session():
-                logger.error("❌ Instagram session is invalid. Attempting to re-authenticate...")
+                logger.error(
+                    "❌ Instagram session is invalid. Attempting to re-authenticate..."
+                )
                 try:
                     # Force a new login
                     self.ig_client.client.login(force=True)
                     if not self.ig_client.validate_session():
-                        logger.error("❌ Re-authentication failed. Stopping publishing attempt.")
+                        logger.error(
+                            "❌ Re-authentication failed. Stopping publishing attempt."
+                        )
                         self.update_content_status(content["content_id"], "failed")
                         return False
                     logger.info("✅ Successfully re-authenticated")
@@ -370,48 +442,47 @@ class IgContentPublisher:
                     )
                 elif content["content_type"] == "story":
                     result = self.publish_story(content)
-
-                if result:
-                    # Update database with the result
-                    with sqlite3.connect(self.db_path) as conn:
-                        cursor = conn.cursor()
-
-                        # Update content status first
-                        self.update_content_status(
-                            content["content_id"], "published", result
-                        )
-
-                        # Try to update specific content table, but don't fail if it errors
-                        try:
-                            if content["content_type"] == "post":
-                                self._update_posts_table(
-                                    cursor, content["content_id"], result
-                                )
-                            elif content["content_type"] == "reel":
-                                self._update_reels_table(
-                                    cursor, content["content_id"], result
-                                )
-                            elif content["content_type"] == "story":
-                                self._update_stories_table(
-                                    cursor, content["content_id"], result
-                                )
-                        except Exception as e:
-                            logger.error(
-                                f"Error updating {content['content_type']} table: {e}"
-                            )
-                            # Don't raise the exception - the content was still published successfully
-
-                        conn.commit()
-
-                    return True
-                else:
-                    self.update_content_status(content["content_id"], "failed")
-                    return False
-
             except Exception as e:
                 logger.error(f"Publishing error: {str(e)}")
                 logger.error(f"Traceback: {traceback.format_exc()}")
                 raise
+
+            if result:
+                # Update database with the result
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    # Update content status first
+                    self.update_content_status(
+                        content["content_id"], "published", result
+                    )
+
+                    # Try to update specific content table, but don't fail if it errors
+                    try:
+                        if content["content_type"] == "post":
+                            self._update_posts_table(
+                                cursor, content["content_id"], result
+                            )
+                        elif content["content_type"] == "reel":
+                            self._update_reels_table(
+                                cursor, content["content_id"], result
+                            )
+                        elif content["content_type"] == "story":
+                            self._update_stories_table(
+                                cursor, content["content_id"], result
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"Error updating {content['content_type']} table: {e}"
+                        )
+                        # Don't raise the exception - the content was still published successfully
+
+                    conn.commit()
+
+                return True
+            else:
+                self.update_content_status(content["content_id"], "failed")
+                return False
 
         except Exception as e:
             logger.error(f"Error publishing content {content['content_id']}: {str(e)}")
@@ -425,6 +496,7 @@ class IgContentPublisher:
                     if temp_file and os.path.exists(temp_file):
                         # Close any open handles to the file
                         import gc
+
                         gc.collect()
                         time.sleep(1)  # Give time for handles to be released
                         os.remove(temp_file)
@@ -438,15 +510,19 @@ class IgContentPublisher:
                         logger.warning(f"Alternative cleanup also failed: {e2}")
 
     def update_content_status(
-        self, content_id: int, status: str, result: Optional[Media] = None
+        self, 
+        content_id: int, 
+        status: str, 
+        result: Optional[Media] = None,
+        error: Optional[str] = None
     ) -> None:
         """Update the status of content in both database and Google Sheet."""
         try:
-            logger.info(
-                f"Starting status update for content_id {content_id} to {status}"
-            )
+            logger.info(f"Starting status update for content_id {content_id} to {status}")
+            if error:
+                logger.info(f"Error message: {error}")
 
-            # First, get the content data including gs_row_number
+            # First get the content data including gs_row_number
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
@@ -457,33 +533,22 @@ class IgContentPublisher:
                 logger.info(f"Retrieved content data: {content}")
 
                 # Update database status
-                cursor.execute(
-                    "UPDATE content SET status = ? WHERE content_id = ?",
-                    (status, content_id),
-                )
+                if error:
+                    cursor.execute(
+                        """UPDATE content 
+                           SET status = ?, error_message = ? 
+                           WHERE content_id = ?""",
+                        (status, error, content_id)
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE content SET status = ? WHERE content_id = ?",
+                        (status, content_id)
+                    )
+                conn.commit()
                 logger.info(f"Updated content status in database to: {status}")
 
-                # If published successfully, update corresponding content-specific table
-                if status == "published" and result:
-                    if isinstance(result, Media):
-                        if result.media_type == 1:  # Photo
-                            logger.info("Updating posts table for photo content")
-                            self._update_posts_table(cursor, content_id, result)
-                        elif result.media_type == 2:
-                            if result.product_type == "clips":  # Reel
-                                logger.info("Updating reels table for reel content")
-                                self._update_reels_table(cursor, content_id, result)
-                            elif content["content_type"] == "story":  # Story
-                                logger.info("Updating stories table for story content")
-                                self._update_stories_table(cursor, content_id, result)
-                            else:  # Video post
-                                logger.info("Updating posts table for video content")
-                                self._update_posts_table(cursor, content_id, result)
-
-                conn.commit()
-                logger.info("Database updates committed successfully")
-
-            # Update Google Sheet status
+            # Update Google Sheet if we have row number
             if content.get("gs_row_number"):
                 # First, get the header row to find column indices
                 header_range = "'Ig Origin Data'!1:1"
@@ -499,22 +564,22 @@ class IgContentPublisher:
                     title: idx + 1 for idx, title in enumerate(headers[0])
                 }
 
-                # Prepare batch updates based on status
+                # Prepare batch updates
                 batch_data = []
                 row_number = content["gs_row_number"]
 
+                # Map of fields to update based on status
+                updates_map = {
+                    "status": status,
+                    "error_message": error if error else "",
+                }
+
                 if status == "published":
-                    # For published content, update all four columns
                     current_time = datetime.now()
-                    updates_map = {
-                        "content_id": str(content_id),
-                        "status": "published",
+                    updates_map.update({
                         "publish_date": current_time.strftime("%Y-%m-%d"),
                         "publish_time": current_time.strftime("%H:%M:%S"),
-                    }
-                else:
-                    # For failed content, only update status column
-                    updates_map = {"status": "failed"}
+                    })
 
                 # Create batch update data
                 for column_title, value in updates_map.items():
@@ -556,18 +621,22 @@ class IgContentPublisher:
     ) -> None:
         """Update the posts table with the API response data."""
         try:
-            # First check if a record already exists
             cursor.execute(
                 "SELECT post_id FROM posts WHERE content_id = ?", (content_id,)
             )
             existing = cursor.fetchone()
 
-            # Safely get attributes with fallbacks
             def safe_get_attr(obj, *attrs, default=None):
                 """Try multiple attribute names, return first found or default."""
                 for attr in attrs:
                     value = getattr(obj, attr, None)
                     if value is not None:
+                        # Convert Pydantic URLs to strings
+                        if hasattr(value, "__class__") and value.__class__.__name__ in [
+                            "Url",
+                            "AnyUrl",
+                        ]:
+                            return str(value)
                         return value
                 return default
 
@@ -582,8 +651,15 @@ class IgContentPublisher:
             else:
                 timestamp = datetime.now().isoformat()
 
-            # Get media URL
-            media_url = safe_get_attr(result, "thumbnail_url", "url", "media_url")
+            # Get media URL and ensure it's a string
+            media_url = str(
+                safe_get_attr(result, "thumbnail_url", "url", "media_url", default="")
+            )
+            if hasattr(media_url, "__class__") and media_url.__class__.__name__ in [
+                "Url",
+                "AnyUrl",
+            ]:
+                media_url = str(media_url)
 
             # Get location info
             location = safe_get_attr(result, "location")
@@ -599,20 +675,22 @@ class IgContentPublisher:
                 safe_get_attr(result, "product_type", default=""),
                 safe_get_attr(result, "caption_text", "caption", default=""),
                 timestamp,
-                media_url,
+                media_url,  # Now guaranteed to be a string
                 location_pk,
                 location_name,
                 safe_get_attr(result, "like_count", default=0),
                 safe_get_attr(result, "comment_count", default=0),
                 bool(resources),
                 (
-                    ",".join(str(safe_get_attr(r, "pk", "id")) for r in resources
+                    ",".join(
+                        str(safe_get_attr(r, "pk", "id", default="")) for r in resources
+                    )
                     if resources
                     else None
                 ),
                 (
                     ",".join(
-                        safe_get_attr(r, "thumbnail_url", "url", default="")
+                        str(safe_get_attr(r, "thumbnail_url", "url", default=""))
                         for r in resources
                     )
                     if resources
@@ -652,18 +730,22 @@ class IgContentPublisher:
                         """,
                         values,
                     )
+
+                # Verify the update/insert
+                cursor.execute(
+                    "SELECT * FROM posts WHERE content_id = ?", (content_id,)
+                )
+                if cursor.fetchone():
+                    logger.info(
+                        f"Successfully updated posts table for content_id: {content_id}"
+                    )
+                else:
+                    raise Exception("Failed to verify post record after update/insert")
+
             except sqlite3.Error as e:
                 logger.error(f"Database error while updating posts table: {e}")
+                logger.error(f"Values being inserted: {values}")
                 raise
-
-            # Verify the update/insert
-            cursor.execute("SELECT * FROM posts WHERE content_id = ?", (content_id,))
-            if cursor.fetchone():
-                logger.info(
-                    f"Successfully updated posts table for content_id: {content_id}"
-                )
-            else:
-                raise Exception("Failed to verify post record after update/insert")
 
         except Exception as e:
             logger.error(f"Error updating posts table: {e}")
@@ -1043,13 +1125,13 @@ class IgContentPublisher:
     def verify_instagram_health(self) -> bool:
         """
         Verify Instagram session health and check for potential IP/automation flags.
-        
+
         Returns:
             bool: True if everything is healthy, False otherwise
         """
         try:
             logger.info("Verifying Instagram session and IP health...")
-            
+
             # Check if session is valid
             if not self.ig_client.validate_session():
                 logger.error("❌ Instagram session is invalid")
@@ -1059,20 +1141,26 @@ class IgContentPublisher:
             try:
                 # Try to fetch own profile - should be fast and safe
                 user_id = self.ig_client.client.user_id
-                self.ig_client.client.user_info(user_id)
-                
-                # Try to fetch timeline feed - good indicator of IP status
-                self.ig_client.client.feed_timeline()
-                
-                # Try to fetch reels tray - another good health indicator
-                self.ig_client.client.feed_reels_tray()
-                
+                user_info = self.ig_client.client.user_info(user_id)
+                if not user_info:
+                    raise Exception("Failed to fetch user info")
+
+                # Try to fetch user feed - good indicator of IP status
+                user_medias = self.ig_client.client.user_medias(user_id, amount=1)
+                if user_medias is None:
+                    raise Exception("Failed to fetch user medias")
+
+                # Try to fetch story feed - another good health indicator
+                reels = self.ig_client.client.user_stories(user_id)
+                if reels is None:
+                    raise Exception("Failed to fetch user stories")
+
                 logger.info("✅ IP checks passed successfully")
                 return True
-                
+
             except Exception as e:
                 error_message = str(e).lower()
-                
+
                 # Check for common IP/automation detection indicators
                 if "feedback_required" in error_message:
                     logger.error("❌ Instagram has flagged potential automation")
@@ -1087,9 +1175,9 @@ class IgContentPublisher:
                     logger.error("❌ Rate limit hit - IP may be flagged")
                     return False
                 else:
-                    logger.error(f"❌ Unknown Instagram error: {e}")
+                    logger.error(f"❌ Instagram API error: {e}")
                     return False
-                    
+
         except Exception as e:
             logger.error(f"Error verifying Instagram health: {e}")
             return False
@@ -1112,22 +1200,24 @@ class IgContentPublisher:
         for i, content in enumerate(pending_content):
             try:
                 logger.info(f"\nProcessing content {i+1} of {len(pending_content)}")
-                
+
                 # Re-verify Instagram health before each post
                 if not self.verify_instagram_health():
                     logger.error("Instagram health check failed. Stopping process.")
                     return
-                
+
                 # Add random delay between posts (2-5 minutes)
                 if i > 0:  # Don't delay before first post
                     delay = random.uniform(120, 300)
                     logger.info(f"Adding random delay of {delay:.1f} seconds...")
                     time.sleep(delay)
-                
+
                 success = self.publish_content(content)
 
                 if success:
-                    logger.info(f"Successfully published content {content['content_id']}")
+                    logger.info(
+                        f"Successfully published content {content['content_id']}"
+                    )
                 else:
                     logger.error(f"Failed to publish content {content['content_id']}")
 
@@ -1137,7 +1227,9 @@ class IgContentPublisher:
             finally:
                 # Only ask to continue if there are more items
                 if i < len(pending_content) - 1:
-                    continue_response = input("\nDo you want to process the next content? (y/N/q): ").lower()
+                    continue_response = input(
+                        "\nDo you want to process the next content? (y/N/q): "
+                    ).lower()
                     if continue_response == "q":
                         logger.info("Exiting program...")
                         return
@@ -1204,12 +1296,12 @@ class IgContentPublisher:
             logger.error("Error updating Google Sheet status: %s", str(e))
 
     def _number_to_column_letter(self, n: int) -> str:
-        """Convert a column number to column letter (1 = A, 27 = AA, etc.)."""
-        result = ""
+        """Convert a column number to Excel-style column letter (A, B, C, ... Z, AA, AB, etc.)."""
+        string = ""
         while n > 0:
             n, remainder = divmod(n - 1, 26)
-            result = chr(65 + remainder) + result
-        return result
+            string = chr(65 + remainder) + string
+        return string
 
     def _check_rate_limits(self) -> bool:
         """Check if we're approaching Instagram's rate limits."""
@@ -1217,23 +1309,23 @@ class IgContentPublisher:
             # Get the user's recent actions count
             user_id = self.ig_client.client.user_id
             user_feed = self.ig_client.client.user_feed(user_id)
-            
+
             # Count recent posts (last 24 hours)
             recent_posts = 0
             now = datetime.now()
             for post in user_feed:
                 if (now - post.taken_at).total_seconds() < 86400:  # 24 hours in seconds
                     recent_posts += 1
-            
+
             # Instagram's typical limits:
             # - Max 25-30 posts per 24 hours
             # - Max 100 actions per hour
             if recent_posts >= 25:
                 logger.warning("⚠️ Approaching Instagram's daily post limit")
                 return False
-                
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error checking rate limits: {e}")
             return False
@@ -1241,14 +1333,14 @@ class IgContentPublisher:
     def _add_safe_delay(self) -> None:
         """Add a randomized delay to avoid automation detection."""
         base_delay = random.uniform(30, 60)  # Base delay between 30-60 seconds
-        
+
         # Add extra delay based on time of day (more during night)
         hour = datetime.now().hour
         if 0 <= hour < 6:  # Night time
             extra_delay = random.uniform(60, 120)
         else:
             extra_delay = random.uniform(15, 45)
-        
+
         total_delay = base_delay + extra_delay
         logger.info(f"Adding safety delay of {total_delay:.1f} seconds...")
         time.sleep(total_delay)

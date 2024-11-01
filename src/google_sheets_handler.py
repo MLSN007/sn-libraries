@@ -3,561 +3,309 @@ import logging
 import os
 import pytz
 from datetime import datetime
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, cast
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union, cast
+import time
 
-if TYPE_CHECKING:
-    from googleapiclient._apis.sheets.v4.resources import SpreadsheetsResource
-    from googleapiclient._apis.drive.v3.resources import FilesResource, DriveResource, AboutResource
-
+from googleapiclient.discovery import Resource, build
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google.oauth2 import service_account
-from google_auth_oauthlib.flow import Flow, InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.errors import HttpError
-from googleapiclient.discovery import build, Resource
-import google.auth.transport.requests
+import traceback
 
-logging.basicConfig(level=logging.DEBUG)  # Change level to DEBUG
+# Type aliases for Google services
+SheetsService = Any  # Type for sheets.spreadsheets()
+DriveService = Any  # Type for drive.files()
+
+
+# More specific type hints for Google services
+class GoogleSheetsResource:
+    """Type hint class for Google Sheets API."""
+
+    def values(self) -> Any: ...
+    def get(self, spreadsheetId: str, range: str, **kwargs) -> Dict[str, Any]: ...
+    def batchUpdate(
+        self, spreadsheetId: str, body: Dict[str, Any], **kwargs
+    ) -> Dict[str, Any]: ...
+
+
+class GoogleDriveResource:
+    """Type hint class for Google Drive API."""
+
+    def list(self, q: str, fields: str, **kwargs) -> Dict[str, Any]: ...
+    def get_media(self, fileId: str, **kwargs) -> Any: ...
+    def get(self, fileId: str, fields: str, **kwargs) -> Dict[str, Any]: ...
+
+
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class GoogleSheetsHandler:
-    """
-    Handles interactions with Google Sheets and Drive APIs for multiple accounts.
+    """Handles interactions with Google Sheets."""
 
-    This class supports two modes of operation:
-    1. Development mode: Uses local configuration files for credentials.
-    2. Production mode: Uses the full OAuth 2.0 flow for desktop applications.
+    account_id: str
+    spreadsheet_id: Optional[str] = None
+    sheets_service: Optional[GoogleSheetsResource] = None
+    drive_service: Optional[GoogleDriveResource] = None
+    credentials: Optional[Credentials] = None
+    token_file: Optional[str] = None
+    creds_file: str = "credentials.json"
+    folder_id: Optional[str] = None
+    scopes: List[str] = field(
+        default_factory=lambda: [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/drive.readonly",
+        ]
+    )
 
-    Usage:
-    - For development: handler = GoogleSheetsHandler('account1')
-    - For production: handler = GoogleSheetsHandler('account1', use_oauth=True)
+    def __post_init__(self) -> None:
+        """Initialize after dataclass fields are set."""
+        self.token_file = self.get_token_file()
 
-    Note: To create the initial config_account_XX.json file, use the initial_setup.py script.
-    This script will guide you through the OAuth flow and create the necessary configuration file.
-    """
+    def get_token_file(self) -> Optional[str]:
+        """Get configuration file path from environment variables."""
+        config_env = f"GOOGLE_SHEETS_CONFIG_{self.account_id.upper()}"
+        config_path = os.getenv(config_env)
 
-    SCOPES = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive.file",
-        "https://www.googleapis.com/auth/drive.readonly",
-        "https://www.googleapis.com/auth/documents",
-    ]
+        logger.debug(f"Looking for config file using env var: {config_env}")
+        logger.debug(f"Config path: {config_path}")
 
-    def __init__(self, account_id: str, spreadsheet_id: Optional[str] = None):
-        """
-        Initialize the GoogleSheetsHandler.
+        if not config_path or not os.path.exists(config_path):
+            logger.error(f"Config file not found at: {config_path}")
+            raise ValueError(f"Please set {config_env} to point to your config file")
 
-        Args:
-            account_id (str): Identifier for the Google account to use.
-            spreadsheet_id (Optional[str]): The ID of the spreadsheet to use.
-        """
-
-        self.account_id = account_id
-        self.spreadsheet_id = spreadsheet_id
-        self.use_oauth = False
-        self.config_path = self._get_config_path()
-        self.creds: Optional[Credentials] = None
-        self.sheets_service: Optional[Resource] = None
-        self.drive_service: Optional[Resource] = None
-
-    def _get_config_path(self) -> Optional[str]:
-        """Get the configuration file path from environment variables."""
-        # Convert account_id to upper case to ensure consistency in environment variable names
-
-        env_var = f"GOOGLE_SHEETS_CONFIG_{self.account_id.upper()}"
-        config_path = os.getenv(env_var)
-        if not self.use_oauth and not config_path:
-            raise ValueError(f"Environment variable {env_var} is not set")
+        logger.debug(f"Found config file at: {config_path}")
         return config_path
 
     def authenticate(self) -> None:
-        """Authenticate with Google APIs."""
+        """Authenticate with Google APIs using config file."""
         try:
-            config_path = self._get_config_path()
+            logger.debug("Starting authentication process")
 
-            if not self.use_oauth and config_path and os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                    if "token" in config:
-                        token_data = config["token"]
-                        if isinstance(token_data, str):
-                            token_data = json.loads(token_data)
-                            self.creds = Credentials.from_authorized_user_info(
-                                token_data, self.SCOPES
-                            )
+            if not self.token_file:
+                raise ValueError("No config file path available")
 
-            if not self.creds or not self.creds.valid:
-                if self.creds and self.creds.expired and self.creds.refresh_token:
-                    try:
-                        self.creds.refresh(Request())
-                    except RefreshError:
-                        logger.error("Token refresh failed, need to re-authenticate")
-                        self.creds = None
-                
-                if not self.creds:
-                    client_secrets_file = os.getenv(
-                        f"GOOGLE_CLIENT_SECRETS_{self.account_id.upper()}"
-                    )
-                    if not client_secrets_file:
-                        raise ValueError(
-                            f"Client secrets file path not set for {self.account_id}"
-                        )
+            # Load credentials from config file
+            with open(self.token_file, "r") as f:
+                config = json.load(f)
+                logger.debug(f"Loaded config with keys: {list(config.keys())}")
 
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        client_secrets_file, self.SCOPES
-                    )
-                    self.creds = flow.run_local_server(port=0)
+                # Create credentials object properly
+                creds_dict = {
+                    'token': str(config.get('token')),
+                    'refresh_token': str(config.get('refresh_token')),
+                    'token_uri': str(config.get('token_uri', 'https://oauth2.googleapis.com/token')),
+                    'client_id': str(config.get('client_id')),
+                    'client_secret': str(config.get('client_secret')),
+                    'scopes': config.get('scopes'),
+                }
 
-            print(f"Token expiry time: {self.creds.expiry}")
+                self.credentials = Credentials.from_authorized_user_info(
+                    info=creds_dict,
+                    scopes=self.scopes
+                )
 
-            # Save the credentials
-            if not self.use_oauth and config_path:
-                with open(config_path, "w") as f:
-                    token_data = self.creds.to_json()
-                    json.dump({"token": token_data}, f)
+                # Handle expiry if present
+                if 'expiry' in config:
+                    self.credentials._expires = config['expiry']
 
-            # Build services with static HTTP
-            self.sheets_service = cast(Resource, build("sheets", "v4", credentials=self.creds))
-            self.drive_service = cast(Resource, build("drive", "v3", credentials=self.creds))
+            # Build services
+            sheets = build("sheets", "v4", credentials=self.credentials)
+            drive = build("drive", "v3", credentials=self.credentials)
+            
+            self.sheets_service = sheets.spreadsheets()
+            self.drive_service = drive.files()
 
             logger.info("Successfully authenticated with Google services")
 
+            # Initialize spreadsheet ID if needed
+            if not self.spreadsheet_id:
+                folder_name = "ig JK tests"
+                self.folder_id = self.get_folder_id(folder_name)
+                if self.folder_id:
+                    spreadsheet_name = f"{self.account_id} IG input table"
+                    self.spreadsheet_id = self.find_file_id(
+                        self.folder_id, spreadsheet_name
+                    )
+                    if not self.spreadsheet_id:
+                        logger.error(f"Could not find spreadsheet: {spreadsheet_name}")
+                    else:
+                        logger.info(f"Found spreadsheet: {self.spreadsheet_id}")
+                else:
+                    logger.error(f"Could not find folder: {folder_name}")
+
         except Exception as e:
             logger.error(f"Authentication failed: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             self.sheets_service = None
             self.drive_service = None
             raise
 
-    def create_spreadsheet(self, title: str, folder_id: str) -> Optional[str]:
-        """
-        Create a new spreadsheet and move it to the specified folder.
-
-        Args:
-            title (str): The title of the new spreadsheet.
-            folder_id (str): The ID of the folder where the spreadsheet should be moved.
-
-        Returns:
-            str: The ID of the created spreadsheet, or None if an error occurred.
-        """
+    def get_folder_id(self, folder_name: str) -> Optional[str]:
+        """Get the ID of a folder by its name."""
         try:
-            spreadsheet = (
-                self.sheets_service.spreadsheets()
-                .create(body={"properties": {"title": title}})
-                .execute()
+            logger.debug(f"Looking for folder: '{folder_name}'")
+            logger.debug(f"Current working directory: {os.getcwd()}")
+            
+            # First try exact path in My Drive
+            query = (
+                "mimeType='application/vnd.google-apps.folder' and "
+                f"name='{folder_name}' and "
+                "'root' in parents and "
+                "trashed=false"
             )
-            spreadsheet_id = spreadsheet["spreadsheetId"]
-
-            # Move the spreadsheet to the specified folder
-            file = (
-                self.drive_service.files()
-                .get(fileId=spreadsheet_id, fields="parents")
-                .execute()
-            )
-            previous_parents = ",".join(file.get("parents", []))
-            self.drive_service.files().update(
-                fileId=spreadsheet_id,
-                addParents=folder_id,
-                removeParents=previous_parents,
-                fields="id, parents",
+            
+            logger.debug(f"Using query: {query}")
+            
+            results = self.drive_service.list(
+                q=query,
+                fields="files(id, name, parents)",
+                spaces='drive',
+                pageSize=1  # We only need one result
             ).execute()
+            
+            items = results.get('files', [])
+            
+            if items:
+                folder_id = items[0]['id']
+                logger.info(f"Found folder '{folder_name}' in My Drive with ID: {folder_id}")
+                return folder_id
+            else:
+                # If not found in root, try searching everywhere
+                query = (
+                    "mimeType='application/vnd.google-apps.folder' and "
+                    f"name='{folder_name}' and "
+                    "trashed=false"
+                )
+                
+                logger.debug(f"Trying broader search with query: {query}")
+                
+                results = self.drive_service.list(
+                    q=query,
+                    fields="files(id, name, parents)",
+                    spaces='drive',
+                    pageSize=1
+                ).execute()
+                
+                items = results.get('files', [])
+                if items:
+                    folder_id = items[0]['id']
+                    logger.info(f"Found folder '{folder_name}' with ID: {folder_id}")
+                    return folder_id
+                
+                logger.error(f"Folder '{folder_name}' not found in Google Drive")
+                logger.error("Please check:")
+                logger.error("1. The folder exists in your Google Drive")
+                logger.error("2. You have access permissions to the folder")
+                logger.error("3. The folder name is exactly 'ig JK tests' (case sensitive)")
+                return None
 
-            return spreadsheet_id
-        except HttpError as error:
-            print(f"An error occurred while creating spreadsheet: {error}")
+        except Exception as e:
+            logger.error(f"Error getting folder ID: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
 
-    def read_spreadsheet(
-        self, spreadsheet_id: str, range_name: str
-    ) -> Optional[List[List[Any]]]:
+    def find_file_id(self, folder_id: str, file_name: str) -> Optional[str]:
+        """Find a file's ID by its name within a specific folder."""
         try:
-            print(f"Reading spreadsheet {spreadsheet_id} with range {range_name}")
+            query = f"'{folder_id}' in parents and name='{file_name}'"
+            results = self.drive_service.list(
+                q=query, fields="files(id, name)"
+            ).execute()
+            items = results.get("files", [])
+
+            if not items:
+                logger.error(f"File '{file_name}' not found in folder {folder_id}")
+                return None
+
+            file_id = items[0]["id"]
+            logger.debug(f"Found file ID: {file_id} for file: {file_name}")
+            return file_id
+
+        except Exception as e:
+            logger.error(f"Error finding file ID: {e}")
+            return None
+
+    def read_spreadsheet(self, spreadsheet_id: str, range_name: str) -> List[List[Any]]:
+        """Read data from a Google Spreadsheet."""
+        try:
             result = (
-                self.sheets_service.spreadsheets()
-                .values()
+                self.sheets_service.values()
                 .get(spreadsheetId=spreadsheet_id, range=range_name)
                 .execute()
             )
-            return result.get("values", [])
-        except RefreshError as e:
-            print(f"Error refreshing token: {e}")
-            # Handle the error (e.g., log the error, retry with exponential backoff)
 
-        except HttpError as error:
-            if error.resp.status == 403:
-                print(
-                    f"Permission denied: Make sure the service account has access to the spreadsheet."
-                )
-            else:
-                print(f"An error occurred while reading spreadsheet: {error}")
-            return None
-
-    def write_to_spreadsheet(
-        self,
-        spreadsheet_id: str,
-        range_name: str,
-        values: List[List[Any]],
-        insert_data_option: str = "OVERWRITE",
-    ) -> Optional[Dict[str, Any]]:
-        try:
-            body = {"values": values}
-            result = (
-                self.sheets_service.spreadsheets()
-                .values()
-                .append(
-                    spreadsheetId=spreadsheet_id,
-                    range=range_name,
-                    valueInputOption="USER_ENTERED",
-                    insertDataOption=insert_data_option,
-                    body=body,
-                )
-                .execute()
-            )
-            return result
-        except HttpError as error:
-            print(f"An error occurred while writing to spreadsheet: {error}")
-            return None
-
-    def get_folder_id(self, folder_name: str) -> Optional[str]:
-        try:
-            # First, let's list all folders in the root of My Drive
-            query = "mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false"
-            logger.debug(f"Executing Drive API query for all folders: {query}")
-            results = (
-                self.drive_service.files()
-                .list(
-                    q=query,
-                    spaces="drive",
-                    fields="files(id, name)",
-                    pageSize=100,  # Adjust this if you have more folders
-                )
-                .execute()
-            )
-            logger.debug(f"All folders in root: {results}")
-
-            # Now, let's search for our specific folder
-            query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and 'root' in parents and trashed=false"
-            logger.debug(f"Executing Drive API query for specific folder: {query}")
-            results = (
-                self.drive_service.files()
-                .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
-                .execute()
-            )
-            logger.debug(f"Drive API response for specific folder: {results}")
-
-            items = results.get("files", [])
-            if not items:
-                logger.warning(f"Folder '{folder_name}' not found")
-                return None
-            return items[0]["id"]
-        except Exception as e:
-            logger.error(f"Error while getting folder ID: {str(e)}")
-            return None
-
-    def read_range(self, spreadsheet_id: str, range_name: str) -> List[List[Any]]:
-        # Implementation
-        pass
-
-    def write_range(
-        self, spreadsheet_id: str, range_name: str, values: List[List[Any]]
-    ) -> None:
-        # Implementation
-        pass
-
-    def append_row(
-        self, spreadsheet_id: str, sheet_name: str, values: List[Any]
-    ) -> None:
-        # Implementation
-        pass
-
-    def get_current_datetime(self) -> str:
-        """Get the current date and time as a formatted string."""
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    def update_spreadsheet(
-        self,
-        spreadsheet_id: str,
-        range_name: str,
-        values: List[List[Any]],
-    ) -> Optional[Dict[str, Any]]:
-        try:
-            body = {"values": values}
-            result = (
-                self.sheets_service.spreadsheets()
-                .values()
-                .update(
-                    spreadsheetId=spreadsheet_id,
-                    range=range_name,
-                    valueInputOption="USER_ENTERED",
-                    body=body,
-                )
-                .execute()
-            )
-            return result
-        except HttpError as error:
-            print(f"An error occurred while updating spreadsheet: {error}")
-            return None
-
-    def append_to_spreadsheet(
-        self,
-        spreadsheet_id: str,
-        range_name: str,
-        values: List[List[Any]],
-    ) -> Optional[Dict[str, Any]]:
-        try:
-            body = {"values": values}
-            result = (
-                self.sheets_service.spreadsheets()
-                .values()
-                .append(
-                    spreadsheetId=spreadsheet_id,
-                    range=range_name,
-                    valueInputOption="USER_ENTERED",
-                    insertDataOption="INSERT_ROWS",
-                    body=body,
-                )
-                .execute()
-            )
-            print(f"Append result: {result}")  # Add this line for debugging
-            return result
-        except HttpError as error:
-            print(f"An error occurred while appending to spreadsheet: {error}")
-            return None
-
-    def batch_update(self, spreadsheet_id: str, data: List[Dict[str, Any]]) -> bool:
-        """
-        Perform a batch update on the spreadsheet.
-
-        Args:
-            spreadsheet_id (str): The ID of the spreadsheet to update
-            data (List[Dict[str, Any]]): List of update operations, each containing 'range' and 'values'
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            body = {
-                "valueInputOption": "USER_ENTERED",
-                "data": [
-                    {"range": item["range"], "values": item["values"]} for item in data
-                ],
-            }
-
-            result = (
-                self.sheets_service.spreadsheets()
-                .values()
-                .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
-                .execute()
-            )
-
-            logger.info(
-                f"Batch update successful: {result.get('totalUpdatedCells')} cells updated"
-            )
-            return True
+            values = result.get("values", [])
+            logger.debug(f"Read {len(values)} rows from spreadsheet")
+            return values
 
         except Exception as e:
-            logger.error(f"Error performing batch update: {e}")
-            return False
-
-    def find_file_id(self, folder_id: str, file_name: str) -> Optional[str]:
-        """
-        Find the ID of a file in a specific folder.
-
-        Args:
-            folder_id (str): The ID of the folder to search in.
-            file_name (str): The name of the file to find.
-
-        Returns:
-            Optional[str]: The ID of the file if found, None otherwise.
-
-        Raises:
-            HttpError: If an error occurs during the API call.
-        """
-        try:
-            query = (
-                f"'{folder_id}' in parents and name = '{file_name}' and trashed = false"
-            )
-            results = (
-                self.drive_service.files()
-                .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
-                .execute()
-            )
-            files = results.get("files", [])
-            if files:
-                return files[0]["id"]
-            else:
-                logger.warning(f"File '{file_name}' not found in folder '{folder_id}'")
-                return None
-        except HttpError as error:
-            logger.error(
-                f"An error occurred while searching for file '{file_name}': {error}"
-            )
-            raise
-
-    def get_user_email(self):
-        """Returns the email address of the authenticated user."""
-        try:
-            # Assuming self.creds is an instance of google.oauth2.credentials.Credentials
-            user_info = self.creds.id_token
-            print(f"User info: {user_info}")
-            print(type(user_info))
-            if user_info and isinstance(
-                user_info, dict
-            ):  # Check if user_info is a dictionary
-                return user_info.get("email")
-            else:
-                print(
-                    "Error: Could not retrieve user email. User info is not in the expected format."
-                )
-                return None
-        except AttributeError:
-            print(
-                "Error: Could not retrieve user email. Credentials might be missing or invalid."
-            )
-            return None
-
-    def check_permissions(self):
-        try:
-            about = self.drive_service.about().get(fields="user,storageQuota").execute()
-            logger.debug(f"User info: {about['user']}")
-            logger.debug(f"Storage quota: {about['storageQuota']}")
-
-            # Try to list drives, but don't fail if user doesn't have access
-            try:
-                drives = self.drive_service.drives().list().execute()
-                logger.debug(f"Accessible drives: {drives}")
-            except HttpError as e:
-                if e.resp.status == 403:
-                    logger.warning(
-                        "User doesn't have access to shared drives. This is not critical."
-                    )
-                else:
-                    raise
-
-            return True
-        except Exception as e:
-            logger.error(f"Error checking permissions: {str(e)}")
-            return False
-
-    def get_rows_without_content_id(self) -> list:
-        """
-        Fetches rows from the Google Sheet that do not have a content_id and have data in 'consecutive_input_#'.
-
-        Returns:
-            list: A list of dictionaries representing rows without content_id.
-        """
-        try:
-            # Read the spreadsheet data
-            data = self.read_spreadsheet(self.spreadsheet_id, "A:S")
-            if not data:
-                logger.error("Failed to read spreadsheet data")
-                return []
-
-            header = data[0]
-            content_id_index = header.index("content_id")
-            consecutive_input_index = header.index("consecutive_input_#")
-
-            rows_without_content_id = []
-            for row_idx, row in enumerate(
-                data[1:], start=2
-            ):  # Start from 2 to account for header row
-                if len(row) <= max(content_id_index, consecutive_input_index):
-                    logger.warning(f"Row {row_idx} is missing expected columns: {row}")
-                    continue
-                if row[consecutive_input_index].isdigit() and not row[content_id_index]:
-                    row_dict = {
-                        header[i]: row[i] if i < len(row) else None
-                        for i in range(len(header))
-                    }
-                    row_dict["row_index"] = (
-                        row_idx  # Add the actual row number from Google Sheet
-                    )
-                    rows_without_content_id.append(row_dict)
-
-            return rows_without_content_id
-        except Exception as e:
-            logger.error(f"Error fetching rows without content_id: {e}")
+            logger.error(f"Error reading spreadsheet: {e}")
             return []
 
-    def update_content_ids(self, rows: list, content_ids: list) -> None:
-        """
-        Updates the Google Sheet with the provided content_ids in the correct column.
-
-        Args:
-            rows (list): A list of dictionaries representing rows to update.
-            content_ids (list): A list of content_ids to write back to the Google Sheet.
-        """
-        try:
-            # First, get the header row to find the content_id column
-            header_range = "'Ig Origin Data'!1:1"
-            headers = self.read_spreadsheet(self.spreadsheet_id, header_range)
-
-            if not headers or not headers[0]:
-                logger.error("Failed to read Google Sheet headers")
-                return
-
-            # Find the content_id column index
+    def batch_update(self, spreadsheet_id: str, data: List[Dict[str, Any]]) -> bool:
+        """Perform a batch update on a Google Spreadsheet with retry logic."""
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                content_id_col_idx = headers[0].index("content_id")
-                # Convert to column letter (0-based index to A1 notation)
-                content_id_col = self._number_to_column_letter(content_id_col_idx + 1)
-            except ValueError:
-                logger.error("Could not find 'content_id' column in sheet headers")
-                return
+                if not spreadsheet_id:
+                    raise ValueError("Missing required parameter 'spreadsheet_id'")
 
-            updates = []
-            for row, content_id in zip(rows, content_ids):
-                row_index = row["row_index"]
-                updates.append(
-                    {
-                        "range": f"'Ig Origin Data'!{content_id_col}{row_index}",
-                        "values": [[content_id]],
-                    }
+                body = {
+                    "valueInputOption": "USER_ENTERED",
+                    "data": [
+                        {"range": item["range"], "values": item["values"]}
+                        for item in data
+                    ],
+                }
+
+                result = (
+                    self.sheets_service.values()
+                    .batchUpdate(spreadsheetId=spreadsheet_id, body=body)
+                    .execute()
                 )
 
-            if updates:
-                self.batch_update(self.spreadsheet_id, updates)
-                logger.info(
-                    "Updated %s content IDs in column %s", len(updates), content_id_col
-                )
-        except Exception as e:
-            logger.error("Error updating content IDs: %s", str(e))
+                logger.debug(f"Batch update completed: {result}")
+                return True
 
-    def _number_to_column_letter(self, n: int) -> str:
+            except Exception as e:
+                logger.error(
+                    f"Error performing batch update (attempt {attempt + 1}/{max_retries}): {e}"
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(2**attempt)  # Exponential backoff
+                    try:
+                        self.authenticate()  # Try to re-authenticate
+                    except Exception as auth_e:
+                        logger.error(f"Re-authentication failed: {auth_e}")
+                else:
+                    return False
+
+    def verify_file_exists(self, file_id: str) -> bool:
         """
-        Convert a column number to Excel-style column letter (A, B, C, ... Z, AA, AB, etc.)
+        Verify that a file exists and is accessible without downloading it.
         
         Args:
-            n (int): The column number (1-based)
+            file_id (str): The Google Drive file ID
             
         Returns:
-            str: The Excel-style column letter
-        """
-        string = ""
-        while n > 0:
-            n, remainder = divmod(n - 1, 26)
-            string = chr(65 + remainder) + string
-        return string
-
-    def batch_update_values(self, data: List[Dict]) -> None:
-        """
-        Perform a batch update of values in the spreadsheet
-        
-        Args:
-            data (List[Dict]): List of dictionaries containing range and values to update
+            bool: True if file exists and is accessible, False otherwise
         """
         try:
-            body = {
-                'valueInputOption': 'RAW',
-                'data': data
-            }
-            self.sheets_service.spreadsheets().values().batchUpdate(
-                spreadsheetId=self.spreadsheet_id,
-                body=body
+            # Just get metadata to verify access
+            file = self.drive_service.get(
+                fileId=file_id,
+                fields='id, name, mimeType'
             ).execute()
+            
+            logger.debug(f"Verified access to file: {file.get('name')} ({file.get('mimeType')})")
+            return True
+            
         except Exception as e:
-            logger.error('Error performing batch update: %s', e)
-            raise
+            logger.error(f"Error verifying file {file_id}: {e}")
+            return False
