@@ -33,7 +33,7 @@ class IgClient:
 
     def __init__(self, account_id: str):
         """
-        Initialize the IgClient instance.
+        Initialize Instagram client with custom device settings.
 
         Args:
             account_id (str): The ID of the Instagram account.
@@ -43,14 +43,30 @@ class IgClient:
             ClientError: If there's an error loading the session file.
         """
         self.account_id = account_id
-        self.config = IgConfig(account_id)
-        self.client = Client()
+        # Create IgConfig instance instead of using class method
+        ig_config = IgConfig(account_id)
+        self.credentials = ig_config  # Store the entire config object
         self.session_file = self._get_session_file_path()
-
-        if os.path.exists(self.session_file):
-            self.load_session()
-        else:
-            self.login()
+        
+        # Custom device settings with Spain-specific region settings
+        DEVICE_SETTINGS = {
+            "app_version": "300.0.0.0.0",
+            "android_version": "34",
+            "android_release": "14.0",
+            "device_model": "SM-S918B",
+            "device": "b0s",
+            "cpu": "exynos2200",
+            "manufacturer": "SAMSUNG",
+            "locale": "es_ES",      # Spain locale
+            "timezone_offset": "3600"  # UTC+1 for Spain
+        }
+        
+        # Initialize client with custom settings
+        self.client = Client()
+        self.client.set_device(DEVICE_SETTINGS)
+        
+        # Load existing session or create new one
+        self._load_or_create_session()
 
     def _get_session_file_path(self) -> str:
         config_file_path = r"C:\Users\manue\Documents\GitHub007\sn-libraries\sessions"
@@ -59,15 +75,15 @@ class IgClient:
     def load_session(self):
         """Load existing session and verify it's still valid."""
         self.client.load_settings(self.session_file)
-        if not self.config.username or not self.config.password:
+        if not self.credentials.username or not self.credentials.password:
             raise ValueError("Username or password not set in the config file")
-        self.client.login(self.config.username, self.config.password)
+        self.client.login(self.credentials.username, self.credentials.password)
 
     def login(self):
         """Perform a fresh login and save the session."""
-        if not self.config.username or not self.config.password:
+        if not self.credentials.username or not self.credentials.password:
             raise ValueError("Username or password not set in the config file")
-        self.client.login(self.config.username, self.config.password)
+        self.client.login(self.credentials.username, self.credentials.password)
         self.save_session()
 
     def save_session(self):
@@ -141,3 +157,27 @@ class IgClient:
             except Exception as e:
                 logger.error(f"❌ Login failed after session reset: {e}")
                 return False
+
+    def _load_or_create_session(self) -> None:
+        """Load existing session or create new one if it doesn't exist."""
+        try:
+            if os.path.exists(self.session_file):
+                logger.info(f"Loading existing session from {self.session_file}")
+                self.load_session()
+            else:
+                logger.info("No existing session found, performing fresh login")
+                self.login()
+                
+            # Verify the session is valid
+            self.client.account_info()
+            logger.info("Session loaded and verified successfully")
+            
+        except Exception as e:
+            logger.warning(f"Error loading session: {e}")
+            logger.info("Attempting fresh login...")
+            try:
+                self.login()
+                logger.info("Fresh login successful")
+            except Exception as login_error:
+                logger.error(f"Login failed: {login_error}")
+                raise

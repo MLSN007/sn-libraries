@@ -22,9 +22,12 @@ logger = logging.getLogger(__name__)
 # Set logging level for google_sheets_handler to DEBUG
 logging.getLogger("google_sheets_handler").setLevel(logging.DEBUG)
 
+
 def main():
     account_id = "JK"
-    logger.info(f"Starting Instagram Google Sheets handling process for account: {account_id}")
+    logger.info(
+        f"Starting Instagram Google Sheets handling process for account: {account_id}"
+    )
 
     try:
         handler = IgGSHandling(account_id)
@@ -45,13 +48,18 @@ def main():
         logger.error(f"Traceback: {traceback.format_exc()}")
         return
 
+    # Uncomment and run the corresponding sessions (here or the one below)
+    # operations = {
+    #     "update_location_ids": handler.update_location_ids,
+    #     "update_music_track_ids": handler.update_music_track_ids,
+    #     "update_media_paths": handler.update_media_paths,
+    # }
+
     # Uncomment and run these sections one at a time as needed
     operations = {
-        # "update_location_ids": handler.update_location_ids,
-        # "update_music_track_ids": handler.update_music_track_ids,
-        # "update_media_paths": handler.update_media_paths,
         "sync_google_sheet_with_db": handler.sync_google_sheet_with_db
     }
+    
 
     for operation_name, operation_func in operations.items():
         try:
@@ -62,11 +70,12 @@ def main():
             logger.error(f"Error during {operation_name}: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             # Ask user if they want to continue with next operation
-            if input(f"\nContinue with remaining operations? (y/N): ").lower() != 'y':
+            if input(f"\nContinue with remaining operations? (y/N): ").lower() != "y":
                 logger.info("Stopping process as requested by user")
                 break
 
     logger.info("Instagram Google Sheets handling process completed")
+
 
 if __name__ == "__main__":
     main()

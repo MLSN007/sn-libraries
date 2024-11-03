@@ -91,10 +91,10 @@ class IgGSHandling:
         """Update location IDs for rows with location_str but no location_id."""
         logger.info("Updating location IDs...")
         try:
-            data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:S")
+            data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "'Ig Origin Data'!A:S")
             if not data:
                 logger.error("Failed to read spreadsheet data")
-                return
+                return False
 
             header = data[0]
             try:
@@ -103,135 +103,171 @@ class IgGSHandling:
                 content_id_index = header.index("content_id")
             except ValueError as e:
                 logger.error("Required column not found in header: %s", str(e))
-                return
+                return False
 
-            # Convert location_id_index to column letter
             location_id_col = self._number_to_column_letter(location_id_index + 1)
+
+            updates = []
+            any_failed_searches = False
+            for row_index, row in enumerate(data[1:], start=2):
+                if row[content_id_index]:  # Skip published content
+                    continue
+                
+                # Check if location needs updating (has location_str but no location_id)
+                if row[location_str_index] and not row[location_id_index]:
+                    locations = self.ig_utils.get_top_locations_by_name(row[location_str_index])
+                    if locations:
+                        location_id = locations[0].pk
+                        updates.append({
+                            "range": f"'Ig Origin Data'!{location_id_col}{row_index}",
+                            "values": [[str(location_id)]]
+                        })
+                        logger.info(f"Will update location ID for row {row_index}: {location_id}")
+                    else:
+                        any_failed_searches = True
+                        logger.warning(f"No location found for: {row[location_str_index]}")
+
+            if updates:
+                success = self.gs_handler.batch_update_values(updates)
+                if success:
+                    logger.info(f"Successfully updated {len(updates)} location IDs")
+                else:
+                    logger.error("Failed to update location IDs")
+                return True
+            else:
+                if any_failed_searches:
+                    logger.warning("No location IDs updated due to search failures")
+                else:
+                    logger.info("No location IDs needed updating")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error updating location IDs: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+
+    def update_music_track_ids(self):
+        """Update music track IDs for rows with music_reference but no music_track_id."""
+        logger.info("Updating music track IDs...")
+        try:
+            data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "'Ig Origin Data'!A:S")
+            if not data:
+                logger.error("Failed to read spreadsheet data")
+                return False
+
+            header = data[0]
+            try:
+                music_reference_index = header.index("music_reference")
+                music_track_id_index = header.index("music_track_id")
+                content_id_index = header.index("content_id")
+            except ValueError as e:
+                logger.error("Required column not found in header: %s", str(e))
+                return False
+
+            music_track_id_col = self._number_to_column_letter(music_track_id_index + 1)
+
+            updates = []
+            any_failed_searches = False
+            for row_index, row in enumerate(data[1:], start=2):
+                if row[content_id_index]:  # Skip published content
+                    continue
+                
+                # Check if music track needs updating (has reference but no track id)
+                if row[music_reference_index] and not row[music_track_id_index]:
+                    tracks = self.ig_utils.music_search(row[music_reference_index])
+                    if tracks:
+                        track = random.choice(tracks[:3])
+                        music_track_id = track.id
+                        updates.append({
+                            "range": f"'Ig Origin Data'!{music_track_id_col}{row_index}",
+                            "values": [[str(music_track_id)]]
+                        })
+                        logger.info(f"Will update music track ID for row {row_index}: {music_track_id}")
+                    else:
+                        any_failed_searches = True
+                        logger.warning(f"No tracks found for reference: {row[music_reference_index]}")
+
+            if updates:
+                success = self.gs_handler.batch_update_values(updates)
+                if success:
+                    logger.info(f"Successfully updated {len(updates)} music track IDs")
+                else:
+                    logger.error("Failed to update music track IDs")
+                return True
+            else:
+                if any_failed_searches:
+                    logger.warning("No music track IDs updated due to search failures")
+                else:
+                    logger.info("No music track IDs needed updating")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error updating music track IDs: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+
+    def update_media_paths(self):
+        """Update media_paths for rows with media_file_names but no media_paths."""
+        logger.info("Updating media paths...")
+        try:
+            data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "'Ig Origin Data'!A:S")
+            if not data:
+                logger.error("Failed to read spreadsheet data")
+                return False
+
+            header = data[0]
+            try:
+                media_file_names_index = header.index("media_file_names")
+                media_paths_index = header.index("media_paths")
+                content_id_index = header.index("content_id")
+            except ValueError as e:
+                logger.error("Required column not found in header: %s", str(e))
+                return False
+
+            media_paths_col = self._number_to_column_letter(media_paths_index + 1)
 
             updates = []
             for row_index, row in enumerate(data[1:], start=2):
                 if row[content_id_index]:  # Skip published content
                     continue
-                if row[location_str_index] and not row[location_id_index]:
-                    locations = self.ig_utils.get_top_locations_by_name(
-                        row[location_str_index]
-                    )
-                    if locations:
-                        location_id = locations[0].pk
-                        updates.append(
-                            {
-                                "range": f"{location_id_col}{row_index}",
-                                "values": [[location_id]],
-                            }
+                
+                # Check if media paths need updating (has file names but no paths)
+                if row[media_file_names_index] and not row[media_paths_index]:
+                    file_names = row[media_file_names_index].split(",")
+                    file_ids = []
+                    for file_name in file_names:
+                        file_id = self.gs_handler.get_file_id_by_name(
+                            file_name.strip(), self.folder_id
                         )
-                        logger.info(
-                            "Updated location ID for row %d: %s", row_index, location_id
-                        )
+                        if file_id:
+                            file_ids.append(file_id)
+                            logger.debug(f"Found ID for {file_name}: {file_id}")
+                        else:
+                            logger.warning(f"Could not find ID for file: {file_name}")
+                    
+                    if file_ids:
+                        media_paths = ",".join(file_ids)
+                        updates.append({
+                            "range": f"'Ig Origin Data'!{media_paths_col}{row_index}",
+                            "values": [[media_paths]]
+                        })
+                        logger.info(f"Will update media paths for row {row_index}: {media_paths}")
 
             if updates:
-                self.gs_handler.batch_update(self.spreadsheet_id, updates)
-                logger.info("Updated %d location IDs", len(updates))
+                success = self.gs_handler.batch_update_values(updates)
+                if success:
+                    logger.info(f"Successfully updated {len(updates)} media paths")
+                else:
+                    logger.error("Failed to update media paths")
+                return True
             else:
-                logger.info("No location IDs to update")
+                logger.info("No media paths needed updating")
+                return False
 
         except Exception as e:
-            logger.error("Error updating location IDs: %s", str(e))
-
-    def update_music_track_ids(self):
-        """Update music track IDs for rows with music_reference but no music_track_id."""
-        logger.info("Updating music track IDs...")
-        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:S")
-        if not data:
-            logger.error("Failed to read spreadsheet data")
-            return
-
-        header = data[0]
-        try:
-            music_reference_index = header.index("music_reference")
-            music_track_id_index = header.index("music_track_id")
-            content_id_index = header.index("content_id")
-        except ValueError as e:
-            logger.error("Required column not found in header: %s", str(e))
-            return
-
-        # Convert music_track_id_index to column letter
-        music_track_id_col = self._number_to_column_letter(music_track_id_index + 1)
-
-        updates = []
-        for row_index, row in enumerate(data[1:], start=2):
-            if row[content_id_index]:  # Skip published content
-                continue
-            if row[music_reference_index] and not row[music_track_id_index]:
-                tracks = self.ig_utils.music_search(row[music_reference_index])
-                if tracks:
-                    track = random.choice(tracks[:3])  # Random selection from top 3
-                    music_track_id = track.id
-                    updates.append(
-                        {
-                            "range": f"{music_track_id_col}{row_index}",
-                            "values": [[music_track_id]],
-                        }
-                    )
-                    logger.info(
-                        f"Updated music track ID for row {row_index}: {music_track_id}"
-                    )
-
-        if updates:
-            self.gs_handler.batch_update(self.spreadsheet_id, updates)
-            logger.info(f"Updated {len(updates)} music track IDs")
-        else:
-            logger.info("No music track IDs to update")
-
-    def update_media_paths(self):
-        """Update media_paths for rows with media_file_names but no media_paths."""
-        logger.info("Updating media paths...")
-        data = self.gs_handler.read_spreadsheet(self.spreadsheet_id, "A:S")
-        if not data:
-            logger.error("Failed to read spreadsheet data")
-            return
-
-        header = data[0]
-        try:
-            media_file_names_index = header.index("media_file_names")
-            media_paths_index = header.index("media_paths")
-            content_id_index = header.index("content_id")
-        except ValueError as e:
-            logger.error("Required column not found in header: %s", str(e))
-            return
-
-        # Convert media_paths_index to column letter
-        media_paths_col = self._number_to_column_letter(media_paths_index + 1)
-
-        updates = []
-        for row_index, row in enumerate(data[1:], start=2):
-            if row[content_id_index]:  # Skip published content
-                continue
-            if row[media_file_names_index] and not row[media_paths_index]:
-                file_names = row[media_file_names_index].split(",")
-                file_ids = []
-                for file_name in file_names:
-                    file_id = self.gs_handler.find_file_id(
-                        self.folder_id, file_name.strip()
-                    )
-                    if file_id:
-                        file_ids.append(file_id)
-                if file_ids:
-                    media_paths = ",".join(file_ids)
-                    updates.append(
-                        {
-                            "range": f"{media_paths_col}{row_index}",
-                            "values": [[media_paths]],
-                        }
-                    )
-                    logger.info(
-                        f"Updated media paths for row {row_index}: {media_paths}"
-                    )
-
-        if updates:
-            self.gs_handler.batch_update(self.spreadsheet_id, updates)
-            logger.info(f"Updated {len(updates)} media paths")
-        else:
-            logger.info("No media paths to update")
+            logger.error(f"Error updating media paths: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
 
     def sync_google_sheet_with_db(self) -> None:
         """
