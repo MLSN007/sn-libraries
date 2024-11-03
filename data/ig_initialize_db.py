@@ -14,9 +14,8 @@ def create_tables():
 
     cursor = conn.cursor()
 
-    # Create the 'content' table
-    cursor.execute(
-        """
+    # Create the 'content' table with appropriate data types and constraints
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS content (
             content_id INTEGER PRIMARY KEY AUTOINCREMENT,
             content_type TEXT,
@@ -33,11 +32,10 @@ def create_tables():
             publish_date TEXT,
             publish_time TEXT,
             status TEXT,
-            gs_row_number INTEGER
-            error_message (TEXT)
+            gs_row_number INTEGER,
+            error_message TEXT
         )
-    """
-    )
+    """)
 
     # Create the 'posts' table
     cursor.execute(

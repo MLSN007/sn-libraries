@@ -4,6 +4,7 @@ from typing import Optional, List
 from google_sheets_handler import GoogleSheetsHandler
 from ig_utils import IgUtils, get_db_connection
 from ig_client import IgClient
+import traceback
 
 logging.basicConfig(level=logging.DEBUG)  # Change level to DEBUG
 logger = logging.getLogger(__name__)
@@ -23,7 +24,9 @@ class IgGSHandling:
         self.account_id = account_id
         self.folder_name = folder_name
         self.gs_handler = GoogleSheetsHandler(account_id)
-        db_path = f"C:/Users/manue/Documents/GitHub007/sn-libraries/data/{account_id}_ig.db"
+        db_path = (
+            f"C:/Users/manue/Documents/GitHub007/sn-libraries/data/{account_id}_ig.db"
+        )
         self.db_connection = get_db_connection(db_path)
         if not self.db_connection:
             raise Exception("Failed to connect to the database.")
@@ -58,8 +61,8 @@ class IgGSHandling:
 
             spreadsheet_name = f"{self.account_id} IG input table"
             # Find the spreadsheet ID within the folder
-            self.spreadsheet_id = self.gs_handler.find_file_id(
-                self.folder_id, spreadsheet_name
+            self.spreadsheet_id = self.gs_handler.get_file_id_by_name(
+                spreadsheet_name, self.folder_id
             )
             if not self.spreadsheet_id:
                 logger.error(
@@ -104,27 +107,33 @@ class IgGSHandling:
 
             # Convert location_id_index to column letter
             location_id_col = self._number_to_column_letter(location_id_index + 1)
-            
+
             updates = []
             for row_index, row in enumerate(data[1:], start=2):
                 if row[content_id_index]:  # Skip published content
                     continue
                 if row[location_str_index] and not row[location_id_index]:
-                    locations = self.ig_utils.get_top_locations_by_name(row[location_str_index])
+                    locations = self.ig_utils.get_top_locations_by_name(
+                        row[location_str_index]
+                    )
                     if locations:
                         location_id = locations[0].pk
-                        updates.append({
-                            "range": f"{location_id_col}{row_index}",
-                            "values": [[location_id]]
-                        })
-                        logger.info("Updated location ID for row %d: %s", row_index, location_id)
+                        updates.append(
+                            {
+                                "range": f"{location_id_col}{row_index}",
+                                "values": [[location_id]],
+                            }
+                        )
+                        logger.info(
+                            "Updated location ID for row %d: %s", row_index, location_id
+                        )
 
             if updates:
                 self.gs_handler.batch_update(self.spreadsheet_id, updates)
                 logger.info("Updated %d location IDs", len(updates))
             else:
                 logger.info("No location IDs to update")
-            
+
         except Exception as e:
             logger.error("Error updating location IDs: %s", str(e))
 
@@ -158,7 +167,10 @@ class IgGSHandling:
                     track = random.choice(tracks[:3])  # Random selection from top 3
                     music_track_id = track.id
                     updates.append(
-                        {"range": f"{music_track_id_col}{row_index}", "values": [[music_track_id]]}
+                        {
+                            "range": f"{music_track_id_col}{row_index}",
+                            "values": [[music_track_id]],
+                        }
                     )
                     logger.info(
                         f"Updated music track ID for row {row_index}: {music_track_id}"
@@ -206,7 +218,10 @@ class IgGSHandling:
                 if file_ids:
                     media_paths = ",".join(file_ids)
                     updates.append(
-                        {"range": f"{media_paths_col}{row_index}", "values": [[media_paths]]}
+                        {
+                            "range": f"{media_paths_col}{row_index}",
+                            "values": [[media_paths]],
+                        }
                     )
                     logger.info(
                         f"Updated media paths for row {row_index}: {media_paths}"
@@ -223,17 +238,59 @@ class IgGSHandling:
         Syncs the Google Sheet with the SQLite database by uploading new entries
         and updating the Google Sheet with generated content IDs.
         """
-        # Fetch rows without content_id
-        rows = self.gs_handler.get_rows_without_content_id()
+        try:
+            # Read all rows from the spreadsheet
+            data = self.gs_handler.read_spreadsheet(
+                self.spreadsheet_id, "'Ig Origin Data'!A:S"
+            )
+            if not data:
+                logger.error("No data found in spreadsheet")
+                return
 
-        # Insert rows into the database and get content_ids
-        content_ids = []
-        for row in rows:
-            content_id = self.insert_into_db(row)
-            content_ids.append(content_id)
+            # Get header row and find content_id column index
+            header = data[0]
+            try:
+                content_id_index = header.index("content_id")
+            except ValueError:
+                logger.error("content_id column not found in spreadsheet")
+                return
 
-        # Update Google Sheet with content_ids
-        self.gs_handler.update_content_ids(rows, content_ids)
+            # Filter rows without content_id
+            rows_without_content_id = []
+            row_indices = []
+            for row_idx, row in enumerate(
+                data[1:], start=2
+            ):  # Start from 2 to match sheet row numbers
+                # Skip rows that are too short or already have content_id
+                if len(row) <= content_id_index or row[content_id_index]:
+                    continue
+
+                # Create a dictionary with column names as keys
+                row_dict = {
+                    header[i]: row[i] if i < len(row) else None
+                    for i in range(len(header))
+                }
+                row_dict["row_index"] = row_idx  # Add row index for later reference
+                rows_without_content_id.append(row_dict)
+                row_indices.append(row_idx)
+
+            if not rows_without_content_id:
+                logger.info("No new rows to process")
+                return
+
+            # Insert rows into the database and get content_ids
+            content_ids = []
+            for row in rows_without_content_id:
+                content_id = self.insert_into_db(row)
+                content_ids.append(content_id)
+
+            # Update Google Sheet with content_ids
+            self.update_content_ids(content_ids, row_indices)
+            logger.info(f"Processed {len(content_ids)} new rows")
+
+        except Exception as e:
+            logger.error(f"Error during sync: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     def insert_into_db(self, row: dict) -> int:
         """
@@ -246,7 +303,7 @@ class IgGSHandling:
             int: The generated content_id from the database.
         """
         print("INSERTING INTO DB", row, "\n")
-        
+
         # Process mentions to ensure @ symbol
         mentions = row.get("mentions", "")
         if mentions:
@@ -291,10 +348,10 @@ class IgGSHandling:
     def _number_to_column_letter(self, n: int) -> str:
         """
         Convert a column number to Excel-style column letter (A, B, C, ... Z, AA, AB, etc.)
-        
+
         Args:
             n (int): The column number (1-based)
-            
+
         Returns:
             str: The Excel-style column letter
         """
@@ -304,28 +361,50 @@ class IgGSHandling:
             string = chr(65 + remainder) + string
         return string
 
-    def update_content_ids(self, content_ids: List[int], row_indices: List[int]) -> None:
+    def update_content_ids(
+        self, content_ids: List[int], row_indices: List[int]
+    ) -> None:
         """
-        Update content IDs in the Google Sheet
-        
+        Update content IDs in the Google Sheet.
+
         Args:
             content_ids (List[int]): List of content IDs to update
             row_indices (List[int]): List of corresponding row indices
         """
         try:
-            # Get the content ID column (should be column B or 2)
-            content_id_column = self._number_to_column_letter(2)  # Convert to 'B'
-            
+            # Read header row to find content_id column
+            header_data = self.gs_handler.read_spreadsheet(
+                self.spreadsheet_id, "'Ig Origin Data'!1:1"
+            )
+            if not header_data:
+                logger.error("Could not read header row")
+                return
+
+            # Find content_id column index
+            try:
+                content_id_index = header_data[0].index("content_id")
+                content_id_col = self._number_to_column_letter(content_id_index + 1)
+            except ValueError:
+                logger.error("content_id column not found in header")
+                return
+
+            # Prepare batch update data
             batch_data = []
             for content_id, row_idx in zip(content_ids, row_indices):
-                range_name = f"'Ig Origin Data'!{content_id_column}{row_idx}"
-                batch_data.append({
-                    'range': range_name,
-                    'values': [[str(content_id)]]
-                })
-            
-            self.gs_handler.batch_update_values(batch_data)
-            logger.info('Updated %d content IDs in column %s', len(content_ids), content_id_column)
-        except Exception as e:
-            logger.error('Error updating content IDs: %s', str(e))
+                range_name = f"'Ig Origin Data'!{content_id_col}{row_idx}"
+                batch_data.append({"range": range_name, "values": [[str(content_id)]]})
 
+            if batch_data:
+                success = self.gs_handler.batch_update_values(batch_data)
+                if success:
+                    logger.info(
+                        f"Successfully updated {len(content_ids)} content IDs in Google Sheet"
+                    )
+                else:
+                    logger.error("Failed to update content IDs in Google Sheet")
+            else:
+                logger.info("No content IDs to update")
+
+        except Exception as e:
+            logger.error(f"Error updating content IDs: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")

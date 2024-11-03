@@ -38,7 +38,10 @@ from googleapiclient.errors import HttpError
 from urllib3 import PoolManager
 
 # Local imports
-from .google_api_types import DriveService, SheetsService, UserinfoService
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent))
+from google_api_types import DriveService, SheetsService, UserinfoService
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -97,6 +100,8 @@ def timed_lru_cache(seconds: int, maxsize: int = 128):
 
 class GoogleSheetsHandler:
     """Handles Google Sheets operations for Instagram content."""
+
+    _authenticated: bool = False
 
     SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",  # Read/write spreadsheets
@@ -158,7 +163,7 @@ class GoogleSheetsHandler:
         Authenticate with Google Services using OAuth2 credentials.
         Handles token refresh and updates the config file when needed.
         """
-        if hasattr(self, "_authenticated") and self._authenticated:
+        if self._authenticated:
             return True
 
         try:
@@ -194,14 +199,14 @@ class GoogleSheetsHandler:
                     return False
 
             # Verify credentials by getting user info
-            userinfo_service: UserinfoService = build("oauth2", "v2", credentials=self.creds)  # type: ignore
-            user_info = userinfo_service.userinfo().get().execute()
+            userinfo_service: UserinfoService = build("oauth2", "v2", credentials=self.creds)  # type: ignore[no-untyped-call]
+            user_info = userinfo_service.userinfo().get().execute()  # type: ignore[attr-defined]
 
             logger.info(f"Authenticated as: {user_info.get('email')}")
 
-            # Build services with proper types
-            self.sheets_service = build("sheets", "v4", credentials=self.creds)  # type: ignore
-            self.drive_service = build("drive", "v3", credentials=self.creds)  # type: ignore
+            # Build services with proper type hints
+            self.sheets_service = build("sheets", "v4", credentials=self.creds)  # type: ignore[no-untyped-call]
+            self.drive_service = build("drive", "v3", credentials=self.creds)  # type: ignore[no-untyped-call]
 
             logger.info("Successfully authenticated with Google services")
             self._authenticated = True
@@ -502,36 +507,55 @@ class GoogleSheetsHandler:
     def get_file_id_by_name(
         self, file_name: str, folder_id: Optional[str] = None
     ) -> Optional[str]:
-        """Cached version of file ID lookup."""
-        return self._get_file_id_by_name_uncached(file_name, folder_id)
-
-    def _get_file_id_by_name_uncached(
-        self, file_name: str, folder_id: Optional[str] = None
-    ) -> Optional[str]:
-        """Original implementation."""
+        """
+        Get file ID by name, optionally within a specific folder. Results are cached.
+        
+        Args:
+            file_name (str): Name of the file to find
+            folder_id (Optional[str]): ID of the folder to search in, if None searches everywhere
+            
+        Returns:
+            Optional[str]: File ID if found, None otherwise
+        """
         try:
-            query_parts = [f"name='{file_name}'"]
+            # Build the query
+            query_parts = [f"name = '{file_name}'", "trashed = false"]
             if folder_id:
-                query_parts.append(f"'{folder_id}' in parents")
-
+                query_parts.append(f"parents in '{folder_id}'")
+            
             query = " and ".join(query_parts)
+            logger.debug(f"Searching for file with query: {query}")
+            
+            # Execute the search
             results = (
-                self.drive_service.files()
-                .list(q=query, spaces="drive", fields="files(id, name)")
+                self.drive_service.files()  # type: ignore[attr-defined]
+                .list(
+                    q=query,
+                    spaces='drive',
+                    fields='files(id, name, mimeType)',
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True
+                )
                 .execute()
             )
-
-            items = results.get("files", [])
-            if not items:
-                logger.error("File '%s' not found", file_name)
+            
+            files = results.get('files', [])
+            
+            if not files:
+                logger.warning(f"No file found with name: {file_name}")
                 return None
-
-            file_id = items[0]["id"]
-            logger.info("Found file '%s' with ID: %s", file_name, file_id)
+                
+            if len(files) > 1:
+                logger.warning(f"Multiple files found with name: {file_name}. Using first match.")
+                for file in files:
+                    logger.debug(f"Found file: {file['name']} (ID: {file['id']})")
+                
+            file_id = files[0]['id']
+            logger.info(f"Found file '{file_name}' with ID: {file_id}")
             return file_id
-
+            
         except Exception as e:
-            logger.error("Error getting file ID: %s", str(e))
+            logger.error(f"Error getting file ID for '{file_name}': {str(e)}")
             return None
 
     def list_folder_contents(self, folder_id: str) -> List[Dict[str, str]]:
@@ -692,3 +716,58 @@ class GoogleSheetsHandler:
 
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
+
+    def check_permissions(self) -> bool:
+        """
+        Check if the authenticated user has necessary permissions.
+        
+        Returns:
+            bool: True if user has required permissions, False otherwise
+        """
+        try:
+            # Test drive access
+            self.drive_service.about().get(fields="user").execute()  # type: ignore[attr-defined]
+            
+            # Test sheets access if spreadsheet_id is set
+            if self.spreadsheet_id:
+                self.sheets_service.spreadsheets().get(  # type: ignore[attr-defined]
+                    spreadsheetId=self.spreadsheet_id
+                ).execute()
+            
+            return True
+            
+        except HttpError as e:
+            logger.error("Permission check failed: %s", str(e))
+            return False
+        except Exception as e:
+            logger.error("Unexpected error during permission check: %s", str(e))
+            return False
+
+    def batch_update_values(self, batch_data: List[Dict[str, Any]]) -> bool:
+        """
+        Update multiple cells in the spreadsheet in a single batch request.
+        
+        Args:
+            batch_data (List[Dict[str, Any]]): List of update operations with range and values
+                Each dict should have format: {"range": "Sheet1!A1", "values": [[value]]}
+                
+        Returns:
+            bool: True if update successful, False otherwise
+        """
+        try:
+            body = {
+                "valueInputOption": "USER_ENTERED",
+                "data": batch_data
+            }
+            
+            self.sheets_service.spreadsheets().values().batchUpdate(  # type: ignore[attr-defined]
+                spreadsheetId=self.spreadsheet_id,
+                body=body
+            ).execute()
+            
+            logger.info(f"Successfully batch updated {len(batch_data)} ranges")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error in batch update: {str(e)}")
+            return False

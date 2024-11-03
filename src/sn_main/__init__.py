@@ -1,5 +1,5 @@
-from .initial_setup import InitialSetup
+from .ig_initial_setup import IgInitialSetup
 
 __all__ = [
-    "InitialSetup",
+    "IgInitialSetup",
 ]

@@ -1,5 +1,5 @@
 """
-Print the contents of all tables in the Instagram database.
+Print the contents of all tables in the Instagram database in a more readable format.
 """
 
 import sqlite3
@@ -7,7 +7,7 @@ import os
 
 def print_table_data(table_name: str) -> None:
     """
-    Print all data from a specified table.
+    Print all data from a specified table in a more readable format.
 
     Args:
         table_name (str): Name of the table to print
@@ -20,14 +20,14 @@ def print_table_data(table_name: str) -> None:
         cursor.execute(f"PRAGMA table_info({table_name})")
         columns = [column[1] for column in cursor.fetchall()]
         print(f"\nTable: {table_name}")
-        print("|".join(columns))
+        print(" | ".join(columns))
 
         # Get and print data
         cursor.execute(f"SELECT * FROM {table_name}")
         rows = cursor.fetchall()
         if rows:
             for row in rows:
-                print("  |  ".join(str(item) for item in row))
+                print(" | ".join(str(item) for item in row))
         else:
             print("No data found in this table.")
 
