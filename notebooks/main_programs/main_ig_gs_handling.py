@@ -11,12 +11,18 @@ warnings.filterwarnings(
 
 # Configure logging with our filter
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 # Add filter to root logger
 logging.getLogger().addFilter(NoHTMLFilter())
+
+# Set specific loggers to INFO level
+logging.getLogger("google_sheets_handler").setLevel(logging.INFO)
+logging.getLogger("instagrapi").setLevel(logging.WARNING)
+logging.getLogger("private_request").setLevel(logging.WARNING)
+logging.getLogger("public_request").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 # Set logging level for google_sheets_handler to DEBUG
@@ -57,9 +63,9 @@ def main():
 
     # Uncomment and run these sections one at a time as needed
     operations = {
-        "sync_google_sheet_with_db": handler.sync_google_sheet_with_db
+        "update_media_paths": handler.update_media_paths,
+        "sync_google_sheet_with_db": handler.sync_google_sheet_with_db,
     }
-    
 
     for operation_name, operation_func in operations.items():
         try:

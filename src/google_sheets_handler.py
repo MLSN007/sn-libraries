@@ -40,6 +40,7 @@ from urllib3 import PoolManager
 # Local imports
 import sys
 from pathlib import Path
+
 sys.path.append(str(Path(__file__).parent))
 from google_api_types import DriveService, SheetsService, UserinfoService
 
@@ -509,11 +510,11 @@ class GoogleSheetsHandler:
     ) -> Optional[str]:
         """
         Get file ID by name, optionally within a specific folder. Results are cached.
-        
+
         Args:
             file_name (str): Name of the file to find
             folder_id (Optional[str]): ID of the folder to search in, if None searches everywhere
-            
+
         Returns:
             Optional[str]: File ID if found, None otherwise
         """
@@ -522,38 +523,40 @@ class GoogleSheetsHandler:
             query_parts = [f"name = '{file_name}'", "trashed = false"]
             if folder_id:
                 query_parts.append(f"parents in '{folder_id}'")
-            
+
             query = " and ".join(query_parts)
             logger.debug(f"Searching for file with query: {query}")
-            
+
             # Execute the search
             results = (
                 self.drive_service.files()  # type: ignore[attr-defined]
                 .list(
                     q=query,
-                    spaces='drive',
-                    fields='files(id, name, mimeType)',
+                    spaces="drive",
+                    fields="files(id, name, mimeType)",
                     supportsAllDrives=True,
-                    includeItemsFromAllDrives=True
+                    includeItemsFromAllDrives=True,
                 )
                 .execute()
             )
-            
-            files = results.get('files', [])
-            
+
+            files = results.get("files", [])
+
             if not files:
                 logger.warning(f"No file found with name: {file_name}")
                 return None
-                
+
             if len(files) > 1:
-                logger.warning(f"Multiple files found with name: {file_name}. Using first match.")
+                logger.warning(
+                    f"Multiple files found with name: {file_name}. Using first match."
+                )
                 for file in files:
                     logger.debug(f"Found file: {file['name']} (ID: {file['id']})")
-                
-            file_id = files[0]['id']
+
+            file_id = files[0]["id"]
             logger.info(f"Found file '{file_name}' with ID: {file_id}")
             return file_id
-            
+
         except Exception as e:
             logger.error(f"Error getting file ID for '{file_name}': {str(e)}")
             return None
@@ -665,16 +668,23 @@ class GoogleSheetsHandler:
             logger.error(f"Failed to flush updates: {e}")
             return False
 
-    def get_media(self, file_id: str) -> Optional[Any]:
-        """Get media file from Google Drive."""
+    def get_media(self, file_id: str) -> Optional[bytes]:
+        """
+        Get media file content from Google Drive.
+
+        Args:
+            file_id (str): The ID of the file in Google Drive
+
+        Returns:
+            Optional[bytes]: The file content as bytes if successful, None otherwise
+        """
         try:
-            # Type ignore because drive_service.files() is dynamically created
-            request = self.drive_service.files().get_media(  # type: ignore
-                fileId=file_id
-            )
-            return request
+            request = self.drive_service.files().get_media(fileId=file_id)  # type: ignore
+            file_content = request.execute()
+            return file_content
+
         except Exception as e:
-            logger.error("Error getting media file: %s", str(e))
+            logger.error(f"Error getting media file {file_id}: {str(e)}")
             return None
 
     def get(self, file_id: str, fields: str) -> Optional[Dict[str, Any]]:
@@ -720,22 +730,22 @@ class GoogleSheetsHandler:
     def check_permissions(self) -> bool:
         """
         Check if the authenticated user has necessary permissions.
-        
+
         Returns:
             bool: True if user has required permissions, False otherwise
         """
         try:
             # Test drive access
             self.drive_service.about().get(fields="user").execute()  # type: ignore[attr-defined]
-            
+
             # Test sheets access if spreadsheet_id is set
             if self.spreadsheet_id:
                 self.sheets_service.spreadsheets().get(  # type: ignore[attr-defined]
                     spreadsheetId=self.spreadsheet_id
                 ).execute()
-            
+
             return True
-            
+
         except HttpError as e:
             logger.error("Permission check failed: %s", str(e))
             return False
@@ -746,28 +756,24 @@ class GoogleSheetsHandler:
     def batch_update_values(self, batch_data: List[Dict[str, Any]]) -> bool:
         """
         Update multiple cells in the spreadsheet in a single batch request.
-        
+
         Args:
             batch_data (List[Dict[str, Any]]): List of update operations with range and values
                 Each dict should have format: {"range": "Sheet1!A1", "values": [[value]]}
-                
+
         Returns:
             bool: True if update successful, False otherwise
         """
         try:
-            body = {
-                "valueInputOption": "USER_ENTERED",
-                "data": batch_data
-            }
-            
+            body = {"valueInputOption": "USER_ENTERED", "data": batch_data}
+
             self.sheets_service.spreadsheets().values().batchUpdate(  # type: ignore[attr-defined]
-                spreadsheetId=self.spreadsheet_id,
-                body=body
+                spreadsheetId=self.spreadsheet_id, body=body
             ).execute()
-            
+
             logger.info(f"Successfully batch updated {len(batch_data)} ranges")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error in batch update: {str(e)}")
             return False

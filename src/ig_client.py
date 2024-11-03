@@ -1,5 +1,5 @@
 """
-This module manages the connection to Instagram using Instagrapi. It provides a class,
+    This module manages the connection to Instagram using Instagrapi. It provides a class,
 IgClient, which handles loading saved sessions, user ID retrieval, and logging into 
 Instagram. The module uses environment variables for storing credentials and leverages 
 logging for better feedback.
@@ -33,40 +33,38 @@ class IgClient:
 
     def __init__(self, account_id: str):
         """
-        Initialize Instagram client with custom device settings.
+        Initialize Instagram client with account credentials.
 
         Args:
-            account_id (str): The ID of the Instagram account.
-
-        Raises:
-            FileNotFoundError: If the session file does not exist.
-            ClientError: If there's an error loading the session file.
+            account_id (str): The Instagram account identifier
         """
         self.account_id = account_id
-        # Create IgConfig instance instead of using class method
-        ig_config = IgConfig(account_id)
-        self.credentials = ig_config  # Store the entire config object
-        self.session_file = self._get_session_file_path()
-        
-        # Custom device settings with Spain-specific region settings
-        DEVICE_SETTINGS = {
-            "app_version": "300.0.0.0.0",
-            "android_version": "34",
-            "android_release": "14.0",
-            "device_model": "SM-S918B",
-            "device": "b0s",
-            "cpu": "exynos2200",
+        self.session_file = f"sessions/{account_id}_session.json"
+
+        # Load config
+        self.config = IgConfig(account_id)
+
+        # Set device settings
+        self.device_settings = {
+            "app_version": "269.0.0.18.75",
+            "android_version": 26,
+            "android_release": "8.0.0",
+            "dpi": "480dpi",
+            "resolution": "1080x1920",
             "manufacturer": "SAMSUNG",
-            "locale": "es_ES",      # Spain locale
-            "timezone_offset": "3600"  # UTC+1 for Spain
+            "device": "SM-G950F",
+            "model": "G950F",
+            "cpu": "universal8895",
+            "version_code": "314665256",
         }
-        
-        # Initialize client with custom settings
+
+        # Initialize client
         self.client = Client()
-        self.client.set_device(DEVICE_SETTINGS)
-        
-        # Load existing session or create new one
-        self._load_or_create_session()
+        self.client.set_device(self.device_settings)
+
+        # Load existing session if available
+        if os.path.exists(self.session_file):
+            self.client.load_settings(self.session_file)
 
     def _get_session_file_path(self) -> str:
         config_file_path = r"C:\Users\manue\Documents\GitHub007\sn-libraries\sessions"
@@ -83,6 +81,11 @@ class IgClient:
         """Perform a fresh login and save the session."""
         if not self.credentials.username or not self.credentials.password:
             raise ValueError("Username or password not set in the config file")
+
+        # Initialize client with device settings
+        self.client = Client()
+        self.client.set_device(self.device_settings)  # Set device settings before login
+
         self.client.login(self.credentials.username, self.credentials.password)
         self.save_session()
 
@@ -127,8 +130,22 @@ class IgClient:
                 os.remove(self.session_file)
                 logger.info("Removed existing session file")
             
-            self.client = Client()  # Create new client instance
-            self.login()  # Perform fresh login
+            # Initialize client with device settings
+            self.client = Client()
+            self.client.set_device(self.device_settings)
+            
+            # Get credentials from config
+            credentials = self.config.get_credentials()
+            username = credentials.get("username")
+            password = credentials.get("password")
+            
+            if not username or not password:
+                raise ValueError("Username or password not found in config")
+            
+            # Perform fresh login
+            self.client.login(username, password)
+            self.save_session()
+            
             logger.info("Successfully reset session and performed fresh login")
             return True
         except Exception as e:
@@ -167,11 +184,11 @@ class IgClient:
             else:
                 logger.info("No existing session found, performing fresh login")
                 self.login()
-                
+
             # Verify the session is valid
             self.client.account_info()
             logger.info("Session loaded and verified successfully")
-            
+
         except Exception as e:
             logger.warning(f"Error loading session: {e}")
             logger.info("Attempting fresh login...")

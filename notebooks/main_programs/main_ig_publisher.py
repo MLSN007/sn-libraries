@@ -6,6 +6,7 @@ import logging
 import argparse
 import sys
 from pathlib import Path
+import traceback
 
 from ig_content_publisher import IgContentPublisher
 from ig_client import IgClient
@@ -25,51 +26,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def main():
-    parser = argparse.ArgumentParser(description='Process pending Instagram content')
-    parser.add_argument('account_id', help='Instagram account identifier (e.g., JK)')
-    parser.add_argument('--force', action='store_true', help='Skip safety confirmation')
-    parser.add_argument('--reset-session', action='store_true', 
-                       help='Reset Instagram session before proceeding')
+def main(account_id: str):
+    """
+    Main function to process and publish Instagram content.
     
-    args = parser.parse_args()
-
+    Args:
+        account_id (str): The Instagram account identifier
+    """
+    publisher = None
     try:
-        # Handle session reset if requested
-        if args.reset_session:
-            logger.info("Attempting to reset Instagram session...")
-            client = IgClient(args.account_id)
-            if client.reset_session():
-                logger.info("✅ Successfully reset session")
-            else:
-                logger.error("❌ Failed to reset session")
+        logger.info(f"Starting Instagram content publishing process for account: {account_id}")
+
+        # Initialize content publisher
+        try:
+            publisher = IgContentPublisher(account_id)
+            logger.info("Content publisher initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize content publisher: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return
+
+        # Verify Instagram health before proceeding
+        try:
+            if not publisher.verify_instagram_health():
+                logger.error("Instagram health check failed. Exiting.")
                 return
+            logger.info("Instagram health check passed")
+        except Exception as e:
+            logger.error(f"Error during Instagram health check: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return
 
-        while True:  # Main loop
-            if not args.force:
-                response = input("\n⚠️  WARNING: This will access Instagram API. Continue? (y/N/q): ").lower()
-                if response == 'q':
-                    logger.info("Exiting program...")
-                    sys.exit(0)
-                elif response != 'y':
-                    logger.info("Operation cancelled by user")
-                    return
-
-            publisher = IgContentPublisher(args.account_id)
-            publisher.process_pending_content()
+        # Process pending content
+        while True:
+            try:
+                publisher.process_pending_content()
+            except Exception as e:
+                logger.error(f"Error processing content: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                if input("\nDo you want to continue despite the error? (y/N): ").lower() != "y":
+                    break
             
-            # Ask if user wants to continue
-            continue_response = input("\nDo you want to process more content? (y/N): ").lower()
-            if continue_response != 'y':
-                logger.info("Exiting program...")
+            # Ask if user wants to process more content
+            if input("\nDo you want to process more content? (y/N): ").lower() != "y":
                 break
 
-    except KeyboardInterrupt:
-        logger.info("\nReceived keyboard interrupt. Exiting gracefully...")
-        sys.exit(0)
+        logger.info("Content publishing process completed")
+
     except Exception as e:
-        logger.error(f"Error running content publisher: {e}")
-        raise
+        logger.error(f"Error in publishing process: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+    finally:
+        if publisher:
+            try:
+                publisher.cleanup()
+                logger.info("Cleanup completed successfully")
+            except Exception as e:
+                logger.error(f"Error during cleanup: {str(e)}")
+        logger.info("Exiting program...")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) != 2:
+        print("Usage: python main_ig_publisher.py <account_id>")
+        sys.exit(1)
+    
+    account_id = sys.argv[1]
+    main(account_id)

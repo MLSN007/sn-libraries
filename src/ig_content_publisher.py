@@ -26,6 +26,7 @@ from ig_client import IgClient
 from ig_post_manager import IgPostManager
 from ig_utils import IgUtils
 from google_sheets_handler import GoogleSheetsHandler
+from ig_gs_handling import IgGSHandling
 from instagrapi.types import (
     Media,
     Location,
@@ -58,13 +59,17 @@ class IgContentPublisher:
             account_id (str): The Instagram account identifier
         """
         self.account_id = account_id
-        self.db_path = (
-            f"C:/Users/manue/Documents/GitHub007/sn-libraries/data/{account_id}_ig.db"
-        )
+        self.db_path = f"C:/Users/manue/Documents/GitHub007/sn-libraries/data/{account_id}_ig.db"
+        
+        # Initialize database connection
+        self.db_connection = sqlite3.connect(self.db_path)
+        
         self.ig_client = IgClient(account_id)
         self.post_manager = IgPostManager(self.ig_client)
+        
+        # Use GoogleSheetsHandler directly as it was before
         self.gs_handler = GoogleSheetsHandler(account_id)
-
+        
         # Try to authenticate Google services
         try:
             self.gs_handler.authenticate()
@@ -197,43 +202,28 @@ class IgContentPublisher:
         max_retries = 3
         retry_delay = 5
 
-        # Check if Google services are available
-        if not self.gs_handler.drive_service:
-            try:
-                logger.info("Attempting to re-authenticate Google services...")
-                self.gs_handler.authenticate()
-                if not self.gs_handler.drive_service:
-                    raise Exception("Failed to authenticate Google Drive service")
-            except Exception as e:
-                logger.error(f"Failed to re-authenticate: {e}")
-                return None
-
         for attempt in range(max_retries):
             try:
                 temp_dir = tempfile.mkdtemp()
                 temp_file_path = Path(temp_dir) / f"temp_media_{file_id}"
 
-                # Get media content
-                request = self.gs_handler.drive_service.get_media(fileId=file_id)
+                # Use the existing get_media method from GoogleSheetsHandler
+                file_content = self.gs_handler.get_media(file_id)
+                if file_content is None:
+                    raise Exception("Failed to get media content")
 
-                # Get file metadata
-                file_metadata = self.gs_handler.drive_service.get(
-                    fileId=file_id, fields="name"
-                ).execute()
+                # Get file metadata for extension
+                file_metadata = self.gs_handler.get(file_id, fields="name")
+                if not file_metadata:
+                    raise Exception("Failed to get file metadata")
 
                 # Get file extension
                 file_extension = Path(file_metadata["name"]).suffix
                 temp_file_path = temp_file_path.with_suffix(file_extension)
 
+                # Write content to file
                 with open(temp_file_path, "wb") as f:
-                    downloader = MediaIoBaseDownload(f, request)
-                    done = False
-                    while not done:
-                        status, done = downloader.next_chunk()
-                        if status:
-                            logger.info(
-                                f"Download progress: {int(status.progress() * 100)}%"
-                            )
+                    f.write(file_content)
 
                 logger.info(
                     f"Successfully saved media to temporary file: {temp_file_path}"
@@ -278,27 +268,36 @@ class IgContentPublisher:
         # First validate all required resources
         try:
             logger.info(f"Validating resources for content_id: {content['content_id']}")
-            
+
             # Check required fields based on content type
-            required_fields = ['content_type', 'media_type', 'caption', 'media_paths']
-            if content['content_type'] == 'story':
+            required_fields = ["content_type", "media_type", "caption", "media_paths"]
+            if content["content_type"] == "story":
                 # Add story-specific required fields
-                required_fields.extend(['mentions', 'hashtags'])
-            
-            missing_fields = [field for field in required_fields 
-                             if not content.get(field)]
+                required_fields.extend(["mentions", "hashtags"])
+
+            missing_fields = [
+                field for field in required_fields if not content.get(field)
+            ]
             if missing_fields:
                 logger.error(f"Missing required fields: {missing_fields}")
-                self.update_content_status(content['content_id'], 'failed', 
-                                         error=f"Missing required fields: {missing_fields}")
+                self.update_content_status(
+                    content["content_id"],
+                    "failed",
+                    error_message=f"Missing required fields: {missing_fields}",
+                )
                 return False
 
             # Validate media files first
-            media_paths = content["media_paths"].split(",") if content["media_paths"] else []
+            media_paths = (
+                content["media_paths"].split(",") if content["media_paths"] else []
+            )
             if not media_paths:
                 logger.error("No media files specified")
-                self.update_content_status(content['content_id'], 'failed', 
-                                         error="No media files specified")
+                self.update_content_status(
+                    content["content_id"],
+                    "failed",
+                    error_message="No media files specified",
+                )
                 return False
 
             # Try to access each media file without downloading
@@ -306,8 +305,11 @@ class IgContentPublisher:
                 file_id = file_id.strip()
                 if not self.gs_handler.verify_file_exists(file_id):
                     logger.error(f"Media file not accessible: {file_id}")
-                    self.update_content_status(content['content_id'], 'failed',
-                                             error=f"Media file not accessible: {file_id}")
+                    self.update_content_status(
+                        content["content_id"],
+                        "failed",
+                        error_message=f"Media file not accessible: {file_id}",
+                    )
                     return False
                 logger.info(f"Verified access to media file: {file_id}")
 
@@ -315,26 +317,31 @@ class IgContentPublisher:
             if content.get("location_id"):
                 try:
                     location = Location(
-                        pk=content["location_id"],
-                        name=content.get("location_name", "")
+                        pk=content["location_id"], name=content.get("location_name", "")
                     )
                     logger.info(f"Validated location: {location.name}")
                 except Exception as e:
                     logger.error(f"Invalid location data: {e}")
-                    self.update_content_status(content['content_id'], 'failed',
-                                             error="Invalid location data")
+                    self.update_content_status(
+                        content["content_id"],
+                        "failed",
+                        error_message="Invalid location data",
+                    )
                     return False
 
             # All validations passed, now proceed with publishing
             logger.info("All resources validated successfully")
-            
+
             # Rest of the publishing code...
-            
+
         except Exception as e:
             logger.error(f"Error validating content {content['content_id']}: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
-            self.update_content_status(content['content_id'], 'failed',
-                                     error=f"Validation error: {str(e)}")
+            self.update_content_status(
+                content["content_id"],
+                "failed",
+                error_message=f"Validation error: {str(e)}",
+            )
             return False
 
         temp_files = []  # Keep track of temporary files
@@ -342,22 +349,19 @@ class IgContentPublisher:
         try:
             # Validate session before publishing
             if not self.ig_client.validate_session():
-                logger.error(
-                    "❌ Instagram session is invalid. Attempting to re-authenticate..."
-                )
+                logger.error("❌ Instagram session is invalid. Attempting to re-authenticate...")
                 try:
-                    # Force a new login
-                    self.ig_client.client.login(force=True)
-                    if not self.ig_client.validate_session():
-                        logger.error(
-                            "❌ Re-authentication failed. Stopping publishing attempt."
-                        )
-                        self.update_content_status(content["content_id"], "failed")
+                    # Try to reset session and perform fresh login
+                    if not self.ig_client.reset_session():
+                        logger.error("❌ Re-authentication failed. Stopping publishing attempt.")
+                        self.update_content_status(content["content_id"], "failed", 
+                                                 error_message="Failed to re-authenticate Instagram session")
                         return False
                     logger.info("✅ Successfully re-authenticated")
                 except Exception as e:
                     logger.error(f"❌ Re-authentication error: {e}")
-                    self.update_content_status(content["content_id"], "failed")
+                    self.update_content_status(content["content_id"], "failed",
+                                             error_message=f"Re-authentication error: {str(e)}")
                     return False
 
             # Check for required dependencies for video content
@@ -512,109 +516,79 @@ class IgContentPublisher:
     def update_content_status(
         self, 
         content_id: int, 
-        status: str, 
-        result: Optional[Media] = None,
-        error: Optional[str] = None
-    ) -> None:
-        """Update the status of content in both database and Google Sheet."""
+        new_status: str, 
+        error_message: Optional[str] = None
+    ) -> bool:
+        """Update the status of a content item in the database and Google Sheet."""
         try:
-            logger.info(f"Starting status update for content_id {content_id} to {status}")
-            if error:
-                logger.info(f"Error message: {error}")
-
-            # First get the content data including gs_row_number
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
+            logger.info(f"Starting status update for content_id {content_id} to {new_status}")
+            
+            # Update database first
+            cursor = self.db_connection.cursor()
+            if new_status == "failed" and error_message:
                 cursor.execute(
-                    "SELECT * FROM content WHERE content_id = ?", (content_id,)
+                    "UPDATE content SET status = ?, error_message = ? WHERE content_id = ?",
+                    (new_status, error_message, content_id)
                 )
-                content = dict(cursor.fetchone())
-                logger.info(f"Retrieved content data: {content}")
-
-                # Update database status
-                if error:
-                    cursor.execute(
-                        """UPDATE content 
-                           SET status = ?, error_message = ? 
-                           WHERE content_id = ?""",
-                        (status, error, content_id)
-                    )
-                else:
-                    cursor.execute(
-                        "UPDATE content SET status = ? WHERE content_id = ?",
-                        (status, content_id)
-                    )
-                conn.commit()
-                logger.info(f"Updated content status in database to: {status}")
-
-            # Update Google Sheet if we have row number
-            if content.get("gs_row_number"):
-                # First, get the header row to find column indices
-                header_range = "'Ig Origin Data'!1:1"
+            else:
+                cursor.execute(
+                    "UPDATE content SET status = ? WHERE content_id = ?",
+                    (new_status, content_id)
+                )
+            
+            # Get row number for Google Sheet update
+            cursor.execute(
+                "SELECT gs_row_number FROM content WHERE content_id = ?", 
+                (content_id,)
+            )
+            result = cursor.fetchone()
+            if not result:
+                raise Exception(f"Content ID {content_id} not found in database")
+                
+            row_number = result[0]
+            self.db_connection.commit()
+            
+            # Update Google Sheet
+            try:
+                # Get headers to find correct columns
                 headers = self.gs_handler.read_spreadsheet(
-                    self.gs_handler.spreadsheet_id, header_range
-                )
-                if not headers or not headers[0]:
-                    logger.error("Failed to read Google Sheet headers")
-                    return
-
-                # Create a mapping of column titles to their indices
-                column_mapping = {
-                    title: idx + 1 for idx, title in enumerate(headers[0])
-                }
-
-                # Prepare batch updates
-                batch_data = []
-                row_number = content["gs_row_number"]
-
-                # Map of fields to update based on status
-                updates_map = {
-                    "status": status,
-                    "error_message": error if error else "",
-                }
-
-                if status == "published":
-                    current_time = datetime.now()
-                    updates_map.update({
-                        "publish_date": current_time.strftime("%Y-%m-%d"),
-                        "publish_time": current_time.strftime("%H:%M:%S"),
+                    self.gs_handler.spreadsheet_id, "'Ig Origin Data'!1:1"
+                )[0]
+                
+                # Find required column indices
+                status_col = self._number_to_column_letter(headers.index("status") + 1)
+                
+                # Prepare updates
+                updates = [{
+                    "range": f"'Ig Origin Data'!{status_col}{row_number}",
+                    "values": [["Y" if new_status == "published" else "Failed"]]
+                }]
+                
+                # Add error message if status is failed
+                if new_status == "failed" and error_message:
+                    error_col = self._number_to_column_letter(headers.index("error_message") + 1)
+                    updates.append({
+                        "range": f"'Ig Origin Data'!{error_col}{row_number}",
+                        "values": [[error_message]]
                     })
-
-                # Create batch update data
-                for column_title, value in updates_map.items():
-                    if column_title in column_mapping:
-                        column_letter = self._number_to_column_letter(
-                            column_mapping[column_title]
-                        )
-                        batch_data.append(
-                            {
-                                "range": f"'Ig Origin Data'!{column_letter}{row_number}",
-                                "values": [[value]],
-                            }
-                        )
-                    else:
-                        logger.warning(
-                            f"Column '{column_title}' not found in Google Sheet"
-                        )
-
-                if batch_data:
-                    if self.gs_handler.batch_update(
-                        self.gs_handler.spreadsheet_id, batch_data
-                    ):
-                        logger.info(
-                            f"Successfully updated Google Sheet for content_id {content_id}"
-                        )
-                    else:
-                        logger.error(
-                            f"Failed to update Google Sheet for content_id {content_id}"
-                        )
+                
+                # Send updates
+                success = self.gs_handler.batch_update_values(updates)
+                if success:
+                    logger.info(f"Successfully updated Google Sheet for content_id {content_id}")
                 else:
-                    logger.error("No columns to update in Google Sheet")
+                    logger.error("Failed to update Google Sheet")
+                    
+            except Exception as e:
+                logger.error(f"Failed to update Google Sheet: {str(e)}")
+                # Don't return False here as database update was successful
 
+            return True
+                
         except Exception as e:
-            logger.error(f"Error updating status: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"Error updating content status: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
 
     def _update_posts_table(
         self, cursor: sqlite3.Cursor, content_id: int, result: Media
@@ -964,8 +938,8 @@ class IgContentPublisher:
             story_mentions = []
             if content["mentions"]:
                 for mention in content["mentions"].split():
-                    username = mention.strip("@")
                     try:
+                        username = mention.strip("@")
                         user_info = self.ig_client.client.user_info_by_username(
                             username
                         )
@@ -1347,5 +1321,9 @@ class IgContentPublisher:
 
     def cleanup(self) -> None:
         """Clean up resources before shutdown."""
-        # Add any cleanup logic here
-        logger.info("Cleaning up resources...")
+        try:
+            if hasattr(self, "db_connection"):
+                self.db_connection.close()
+            logger.info("Cleaned up database connection")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")

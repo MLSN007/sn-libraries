@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Optional
+from typing import Optional, Dict
 
 
 logger = logging.getLogger(__name__)
@@ -56,3 +56,10 @@ class IgConfig:
                 f"Error loading config for account {self.account_id}: {str(e)}"
             )
             raise
+
+    def get_credentials(self) -> Dict[str, str]:
+        """Get Instagram credentials from config."""
+        return {
+            "username": self.username,
+            "password": self.password
+        }
