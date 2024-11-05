@@ -4,14 +4,19 @@ This module provides comprehensive testing of proxy settings, rotations,
 and location verification.
 """
 
+import json
 import logging
+import os
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
+from pathlib import Path
+from dotenv import load_dotenv
 import requests
 from proxy_manager import ProxyManager
 from ig_client import IgClient
-import json
-from pathlib import Path
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -23,43 +28,47 @@ logger = logging.getLogger(__name__)
 class ProxyTester:
     """Class to manage proxy testing operations."""
 
-    def __init__(self, account_id: str = "JK"):
+    def __init__(self, account_id: str = "JK") -> None:
         """
         Initialize the proxy tester.
 
         Args:
-            account_id (str): Instagram account identifier for testing
+            account_id (str): Instagram account identifier for testing.
         """
-        self.account_id = account_id
-        self.proxy_manager = ProxyManager()
-        self.ig_client = IgClient(account_id)
+        self.account_id: str = account_id
+        self.proxy_manager: ProxyManager = ProxyManager()
+        self.ig_client: IgClient = IgClient(account_id)
+        self.rotations: int = int(os.getenv("PROXY_ROTATIONS", 3))
+        logger.info("Configured to perform %d proxy rotations", self.rotations)
 
     def test_basic_connection(self) -> bool:
         """
         Test basic proxy connection using a simple IP check.
 
         Returns:
-            bool: True if connection is successful
+            bool: True if connection is successful, False otherwise.
         """
         logger.info("\n=== Testing Basic Connection ===")
         try:
-            proxies = self.proxy_manager.get_current_proxies()
-            response = requests.get(
+            proxies: Dict[str, str] = self.proxy_manager.get_current_proxies()
+            response: requests.Response = requests.get(
                 "http://ip-api.com/json", proxies=proxies, timeout=30
             )
-            data = response.json()
+            data: Dict = response.json()
 
             logger.info("Connection Details:")
-            logger.info(f"  IP Address: {data.get('query', 'Unknown')}")
+            logger.info("  IP Address: %s", data.get("query", "Unknown"))
             logger.info(
-                f"  Location: {data.get('city', 'Unknown')}, {data.get('country', 'Unknown')}"
+                "  Location: %s, %s",
+                data.get("city", "Unknown"),
+                data.get("country", "Unknown"),
             )
-            logger.info(f"  ISP: {data.get('isp', 'Unknown')}")
+            logger.info("  ISP: %s", data.get("isp", "Unknown"))
 
             return response.status_code == 200
 
         except Exception as e:
-            logger.error(f"Basic connection test failed: {e}")
+            logger.error("Basic connection test failed: %s", e)
             return False
 
     def test_location_verification(self) -> bool:
@@ -67,7 +76,7 @@ class ProxyTester:
         Verify that the proxy is providing an IP from the correct location.
 
         Returns:
-            bool: True if location matches configuration
+            bool: True if location matches configuration, False otherwise.
         """
         logger.info("\n=== Testing Location Verification ===")
         try:
@@ -79,7 +88,7 @@ class ProxyTester:
             return True
 
         except Exception as e:
-            logger.error(f"Location verification failed: {e}")
+            logger.error("Location verification failed: %s", e)
             return False
 
     def test_proxy_rotation(self, rotations: int = 3) -> bool:
@@ -87,36 +96,41 @@ class ProxyTester:
         Test proxy rotation functionality.
 
         Args:
-            rotations (int): Number of rotations to test
+            rotations (int): Number of rotations to test.
 
         Returns:
-            bool: True if all rotations are successful
+            bool: True if all rotations are successful, False otherwise.
         """
-        logger.info(f"\n=== Testing Proxy Rotation ({rotations} times) ===")
-        previous_ips = set()
+        logger.info("\n=== Testing Proxy Rotation (%d times) ===", rotations)
+        previous_ips: Set[str] = set()
 
         try:
             for i in range(rotations):
-                logger.info(f"\nRotation {i + 1}/{rotations}")
+                logger.info("\nRotation %d/%d", i + 1, rotations)
 
                 # Force rotation
-                self.proxy_manager._load_and_set_proxy()
+                if not self.proxy_manager._load_and_set_proxy():
+                    logger.error("❌ Failed to rotate proxy")
+                    return False
 
                 # Check new IP
-                response = requests.get(
+                proxies: Dict[str, str] = self.proxy_manager.get_current_proxies()
+                response: requests.Response = requests.get(
                     "http://ip-api.com/json",
-                    proxies=self.proxy_manager.get_current_proxies(),
+                    proxies=proxies,
                     timeout=30,
                 )
-                data = response.json()
-                current_ip = data.get("query")
+                data: Dict = response.json()
+                current_ip: str = data.get("query", "Unknown")
 
                 if current_ip in previous_ips:
-                    logger.warning(f"⚠️ IP {current_ip} was already used")
+                    logger.warning("⚠️ IP %s was already used", current_ip)
                 else:
-                    logger.info(f"✅ New IP: {current_ip}")
+                    logger.info("✅ New IP: %s", current_ip)
                     logger.info(
-                        f"   Location: {data.get('city')}, {data.get('country')}"
+                        "   Location: %s, %s",
+                        data.get("city", "Unknown"),
+                        data.get("country", "Unknown"),
                     )
 
                 previous_ips.add(current_ip)
@@ -125,7 +139,7 @@ class ProxyTester:
             return True
 
         except Exception as e:
-            logger.error(f"Proxy rotation test failed: {e}")
+            logger.error("Proxy rotation test failed: %s", e)
             return False
 
     def test_instagram_connection(self) -> bool:
@@ -133,7 +147,7 @@ class ProxyTester:
         Test Instagram connection through proxy.
 
         Returns:
-            bool: True if Instagram connection is successful
+            bool: True if Instagram connection is successful, False otherwise.
         """
         logger.info("\n=== Testing Instagram Connection ===")
         try:
@@ -145,7 +159,7 @@ class ProxyTester:
                 return False
 
         except Exception as e:
-            logger.error(f"Instagram connection test failed: {e}")
+            logger.error("Instagram connection test failed: %s", e)
             return False
 
     def save_test_results(self, results: Dict[str, bool]) -> None:
@@ -153,22 +167,22 @@ class ProxyTester:
         Save test results to a JSON file.
 
         Args:
-            results (Dict[str, bool]): Dictionary of test results
+            results (Dict[str, bool]): Dictionary of test results.
         """
         try:
-            output_dir = Path("test_results")
+            output_dir: Path = Path("test_results")
             output_dir.mkdir(exist_ok=True)
 
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            output_file = output_dir / f"proxy_test_results_{timestamp}.json"
+            timestamp: str = time.strftime("%Y%m%d_%H%M%S")
+            output_file: Path = output_dir / f"proxy_test_results_{timestamp}.json"
 
             with open(output_file, "w") as f:
                 json.dump(results, f, indent=2)
 
-            logger.info(f"\nTest results saved to: {output_file}")
+            logger.info("\nTest results saved to: %s", output_file)
 
         except Exception as e:
-            logger.error(f"Failed to save test results: {e}")
+            logger.error("Failed to save test results: %s", e)
 
 
 def run_all_tests(account_id: str = "JK") -> None:
@@ -176,17 +190,17 @@ def run_all_tests(account_id: str = "JK") -> None:
     Run all proxy tests and save results.
 
     Args:
-        account_id (str): Instagram account identifier for testing
+        account_id (str): Instagram account identifier for testing.
     """
-    tester = ProxyTester(account_id)
-    results = {}
+    tester: ProxyTester = ProxyTester(account_id)
+    results: Dict[str, bool] = {}
 
     logger.info("Starting proxy connection tests...")
 
     # Run all tests
     results["basic_connection"] = tester.test_basic_connection()
     results["location_verification"] = tester.test_location_verification()
-    results["proxy_rotation"] = tester.test_proxy_rotation(rotations=8)
+    results["proxy_rotation"] = tester.test_proxy_rotation(rotations=tester.rotations)
 
     # ---------------------------------------------------------------------------
     # results['instagram_connection'] = tester.test_instagram_connection()
@@ -195,8 +209,8 @@ def run_all_tests(account_id: str = "JK") -> None:
     # Print summary
     logger.info("\n=== Test Results Summary ===")
     for test_name, result in results.items():
-        status = "✅ PASSED" if result else "❌ FAILED"
-        logger.info(f"{test_name}: {status}")
+        status: str = "✅ PASSED" if result else "❌ FAILED"
+        logger.info("%s: %s", test_name, status)
 
     # Save results
     tester.save_test_results(results)

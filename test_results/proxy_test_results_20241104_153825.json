@@ -1,6 +1,0 @@
-{
-  "proxy_configuration": true,
-  "basic_connection": true,
-  "location_verification": true,
-  "proxy_rotation": true
-}
