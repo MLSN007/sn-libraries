@@ -63,24 +63,33 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 
-def main() -> None:
-    """Main execution function."""
-    global publisher
-
-    # Parse arguments
-    parser = argparse.ArgumentParser(description="Process pending Instagram content")
-    parser.add_argument("account_id", help="Instagram account identifier (e.g., JK)")
-    args = parser.parse_args()
-
+def main(account_id: str):
+    """Main function to process and publish Instagram content."""
+    publisher = None
     try:
-        publisher = IgContentPublisher(args.account_id)
-        publisher.process_pending_content()
-    except Exception as e:
-        logger.error("Error in content publishing: %s", str(e), exc_info=True)
-        raise
-    finally:
-        if publisher:
-            publisher.cleanup()  # Ensure resources are properly released
+        logger.info(f"Starting Instagram content publishing process for account: {account_id}")
+
+        # Initialize content publisher
+        try:
+            publisher = IgContentPublisher(account_id)
+            logger.info("Content publisher initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize content publisher: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return
+
+        # Verify Instagram health and proxy before proceeding
+        try:
+            if not publisher.verify_instagram_health():
+                logger.error("Instagram health check or proxy verification failed. Exiting.")
+                return
+            logger.info("Instagram health check and proxy verification passed")
+        except Exception as e:
+            logger.error(f"Error during health check: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return
+
+        # Rest of the code remains the same...
 
 
 if __name__ == "__main__":

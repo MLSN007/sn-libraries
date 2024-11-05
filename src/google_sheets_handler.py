@@ -671,10 +671,10 @@ class GoogleSheetsHandler:
     def get_media(self, file_id: str) -> Optional[bytes]:
         """
         Get media file content from Google Drive.
-
+        
         Args:
             file_id (str): The ID of the file in Google Drive
-
+            
         Returns:
             Optional[bytes]: The file content as bytes if successful, None otherwise
         """
@@ -682,7 +682,7 @@ class GoogleSheetsHandler:
             request = self.drive_service.files().get_media(fileId=file_id)  # type: ignore
             file_content = request.execute()
             return file_content
-
+            
         except Exception as e:
             logger.error(f"Error getting media file {file_id}: {str(e)}")
             return None

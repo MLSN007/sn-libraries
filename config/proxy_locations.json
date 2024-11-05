@@ -1,0 +1,16 @@
+{
+    "default": {
+        "country_code": "ES",
+        "country_name": "Spain",
+        "city": "huelva",
+        "lifetime": "30m",
+        "streaming": "1"
+    },
+    "usa": {
+        "country_code": "US",
+        "country_name": "United States",
+        "city": "washington",
+        "lifetime": "30m",
+        "streaming": "1"
+    }
+} 

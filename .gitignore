@@ -12,6 +12,12 @@ config_account_007.json
 client_account_key_JK.json
 client_account_key_007.json
 
+# environment
+.env   
+
+# proxys
+proxy_list.txt
+
 # FB
 # JK accounts
 FB_JK_JK Travel_JK Travel_config.json

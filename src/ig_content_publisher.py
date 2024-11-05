@@ -21,6 +21,7 @@ from pathlib import Path
 import traceback
 import json
 import random
+import requests
 
 from ig_client import IgClient
 from ig_post_manager import IgPostManager
@@ -1105,6 +1106,18 @@ class IgContentPublisher:
         """
         try:
             logger.info("Verifying Instagram session and IP health...")
+
+            # Test proxy connection first
+            try:
+                test_url = 'https://ipv4.icanhazip.com'
+                response = requests.get(test_url, proxies={
+                    'http': self.ig_client.proxy,
+                    'https': self.ig_client.proxy
+                })
+                logger.info(f"Using IP: {response.text.strip()}")
+            except Exception as e:
+                logger.error(f"Proxy connection failed: {e}")
+                return False
 
             # Check if session is valid
             if not self.ig_client.validate_session():

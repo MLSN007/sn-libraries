@@ -446,7 +446,7 @@ class IgGSHandling:
             try:
                 content_id_index = header_data[0].index("content_id")
                 content_id_col = self._number_to_column_letter(content_id_index + 1)
-                
+
                 # Only get error_message column if status is 'failed'
                 if status == "failed":
                     error_msg_index = header_data[0].index("error_message")
@@ -458,32 +458,40 @@ class IgGSHandling:
             # Prepare batch update data
             batch_data = []
             cursor = self.db_connection.cursor()
-            
+
             for content_id, row_idx in zip(content_ids, row_indices):
                 # Update content_id
-                batch_data.append({
-                    "range": f"'Ig Origin Data'!{content_id_col}{row_idx}",
-                    "values": [[str(content_id)]]
-                })
-                
+                batch_data.append(
+                    {
+                        "range": f"'Ig Origin Data'!{content_id_col}{row_idx}",
+                        "values": [[str(content_id)]],
+                    }
+                )
+
                 # If status is failed, get error message from database and update it
                 if status == "failed":
                     cursor.execute(
                         "SELECT error_message FROM content WHERE content_id = ?",
-                        (content_id,)
+                        (content_id,),
                     )
                     result = cursor.fetchone()
                     if result and result[0]:  # If error message exists
-                        batch_data.append({
-                            "range": f"'Ig Origin Data'!{error_msg_col}{row_idx}",
-                            "values": [[result[0]]]
-                        })
-                        logger.info(f"Adding error message update for content_id {content_id}")
+                        batch_data.append(
+                            {
+                                "range": f"'Ig Origin Data'!{error_msg_col}{row_idx}",
+                                "values": [[result[0]]],
+                            }
+                        )
+                        logger.info(
+                            f"Adding error message update for content_id {content_id}"
+                        )
 
             if batch_data:
                 success = self.gs_handler.batch_update_values(batch_data)
                 if success:
-                    logger.info(f"Successfully updated {len(content_ids)} rows in Google Sheet")
+                    logger.info(
+                        f"Successfully updated {len(content_ids)} rows in Google Sheet"
+                    )
                 else:
                     logger.error("Failed to update Google Sheet")
 
@@ -495,7 +503,9 @@ class IgGSHandling:
         """Delegate to GoogleSheetsHandler."""
         return self.gs_handler.get_folder_id(folder_name)
 
-    def get_file_id_by_name(self, file_name: str, folder_id: Optional[str] = None) -> Optional[str]:
+    def get_file_id_by_name(
+        self, file_name: str, folder_id: Optional[str] = None
+    ) -> Optional[str]:
         """Delegate to GoogleSheetsHandler."""
         return self.gs_handler.get_file_id_by_name(file_name, folder_id)
 

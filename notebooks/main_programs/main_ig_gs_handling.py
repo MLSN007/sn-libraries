@@ -1,87 +1,98 @@
+"""
+Main program for handling Instagram Google Sheets operations and proxy management.
+"""
+
 import warnings
 import logging
 import traceback
+from pathlib import Path
 from ig_gs_handling import IgGSHandling
-from html_filter import NoHTMLFilter
+from proxy_manager import ProxyManager
+from typing import Optional, Dict
 
-# Suppress google auth warnings
-warnings.filterwarnings(
-    "ignore", message="file_cache is unavailable when using oauth2client >= 4.0.0"
-)
-
-# Configure logging with our filter
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-
-# Add filter to root logger
-logging.getLogger().addFilter(NoHTMLFilter())
-
-# Set specific loggers to INFO level
-logging.getLogger("google_sheets_handler").setLevel(logging.INFO)
-logging.getLogger("instagrapi").setLevel(logging.WARNING)
-logging.getLogger("private_request").setLevel(logging.WARNING)
-logging.getLogger("public_request").setLevel(logging.WARNING)
-
 logger = logging.getLogger(__name__)
-# Set logging level for google_sheets_handler to DEBUG
-logging.getLogger("google_sheets_handler").setLevel(logging.DEBUG)
 
-
-def main():
-    account_id = "JK"
-    logger.info(
-        f"Starting Instagram Google Sheets handling process for account: {account_id}"
-    )
-
+def handle_google_sheets(account_id: str) -> bool:
+    """
+    Handle Google Sheets operations.
+    
+    Args:
+        account_id (str): The Instagram account identifier
+        
+    Returns:
+        bool: True if all operations completed successfully
+    """
+    logger.info(f"Starting Google Sheets handling for account: {account_id}")
     try:
         handler = IgGSHandling(account_id)
         logger.info("IgGSHandling instance created successfully")
-    except Exception as e:
-        logger.error(f"Failed to create IgGSHandling instance: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return
-
-    try:
-        logger.info("Attempting to authenticate and set up...")
+        
         if not handler.authenticate_and_setup():
             logger.error("Failed to authenticate and set up. Exiting.")
-            return
-        logger.info("Authentication and setup successful")
+            return False
+            
+        operations = {
+            "update_location_ids": handler.update_location_ids,
+            "update_music_track_ids": handler.update_music_track_ids,
+            "update_media_paths": handler.update_media_paths,
+            "sync_google_sheet_with_db": handler.sync_google_sheet_with_db
+        }
+        
+        for operation_name, operation_func in operations.items():
+            try:
+                logger.info(f"Starting {operation_name}...")
+                operation_func()
+                logger.info(f"Successfully completed {operation_name}")
+            except Exception as e:
+                logger.error(f"Error during {operation_name}: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                return False
+                
+        return True
+        
     except Exception as e:
-        logger.error(f"Error during authentication and setup: {str(e)}")
+        logger.error(f"Error in Google Sheets handling: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        return
+        return False
 
-    # Uncomment and run the corresponding sessions (here or the one below)
-    # operations = {
-    #     "update_location_ids": handler.update_location_ids,
-    #     "update_music_track_ids": handler.update_music_track_ids,
-    #     "update_media_paths": handler.update_media_paths,
-    # }
+def test_proxy_connection(proxy_manager: ProxyManager) -> bool:
+    """
+    Test proxy connection and location.
+    
+    Args:
+        proxy_manager: ProxyManager instance
+        
+    Returns:
+        bool: True if connection is valid and in correct location
+    """
+    if proxy_manager.validate_connection():
+        logger.info("✅ Proxy connection validated successfully")
+        return True
+    else:
+        logger.error("❌ Proxy validation failed")
+        return False
 
-    # Uncomment and run these sections one at a time as needed
-    operations = {
-        "update_media_paths": handler.update_media_paths,
-        "sync_google_sheet_with_db": handler.sync_google_sheet_with_db,
-    }
-
-    for operation_name, operation_func in operations.items():
-        try:
-            logger.info(f"Starting {operation_name}...")
-            operation_func()
-            logger.info(f"Successfully completed {operation_name}")
-        except Exception as e:
-            logger.error(f"Error during {operation_name}: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            # Ask user if they want to continue with next operation
-            if input(f"\nContinue with remaining operations? (y/N): ").lower() != "y":
-                logger.info("Stopping process as requested by user")
-                break
-
-    logger.info("Instagram Google Sheets handling process completed")
-
+def main():
+    """Main execution function."""
+    account_id = "JK"
+    
+    # Initialize proxy manager
+    proxy_manager = ProxyManager()
+    
+    # Test proxy connection
+    if test_proxy_connection(proxy_manager):
+        # Proceed with Google Sheets operations
+        if handle_google_sheets(account_id):
+            logger.info("✅ Google Sheets operations completed successfully")
+        else:
+            logger.error("❌ Google Sheets operations failed")
+    else:
+        logger.error("❌ Proxy connection test failed")
 
 if __name__ == "__main__":
     main()
