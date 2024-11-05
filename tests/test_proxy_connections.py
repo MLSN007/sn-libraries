@@ -186,7 +186,7 @@ def run_all_tests(account_id: str = "JK") -> None:
     # Run all tests
     results["basic_connection"] = tester.test_basic_connection()
     results["location_verification"] = tester.test_location_verification()
-    results["proxy_rotation"] = tester.test_proxy_rotation()
+    results["proxy_rotation"] = tester.test_proxy_rotation(rotations=8)
 
     # ---------------------------------------------------------------------------
     # results['instagram_connection'] = tester.test_instagram_connection()
