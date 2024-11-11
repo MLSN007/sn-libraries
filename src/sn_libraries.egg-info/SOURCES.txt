@@ -1,6 +1,6 @@
 README.md
+pyproject.toml
 setup.py
-src/data_handling/__init__.py
 src/gen_ai/__init__.py
 src/sn_libraries.egg-info/PKG-INFO
 src/sn_libraries.egg-info/SOURCES.txt
@@ -8,8 +8,8 @@ src/sn_libraries.egg-info/dependency_links.txt
 src/sn_libraries.egg-info/requires.txt
 src/sn_libraries.egg-info/top_level.txt
 src/sn_main/__init__.py
-src/sn_main/ig_initial_setup.py
 src/sn_main/fb/__init__.py
 src/sn_main/ig/__init__.py
 tests/test_error_handler.py
 tests/test_google_sheets_handler.py
+tests/test_proxy_connections.py
