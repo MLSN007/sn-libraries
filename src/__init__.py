@@ -26,7 +26,7 @@ from .ig_post_manager import IgPostManager
 from .ig_utils import IgUtils
 from .main_ig_publisher import MainIgPublisher
 from .post_composer import PostComposer
-from .proxy_manager import ProxyManager
+from .proxy_services.proxy_manager import ProxyManager
 from .publishing_orchestrator import PublishingOrchestrator
 
 __all__ = [

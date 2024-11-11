@@ -7,7 +7,7 @@ import logging
 import traceback
 from pathlib import Path
 from ig_gs_handling import IgGSHandling
-from proxy_manager import ProxyManager
+from proxy_services.proxy_manager import ProxyManager
 from typing import Optional, Dict
 
 # Configure logging

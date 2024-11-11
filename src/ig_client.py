@@ -12,7 +12,7 @@ from instagrapi import Client
 from instagrapi.exceptions import ClientLoginRequired, ClientError, UserNotFound
 from pathlib import Path
 from ig_config import IgConfig
-from proxy_manager import ProxyManager
+from proxy_services.proxy_manager import ProxyManager
 import time
 import random
 import requests

@@ -1,0 +1,10 @@
+Metadata-Version: 2.1
+Name: sn-libraries
+Version: 0.1.0
+Summary: manu's sn-libraries
+Author-email: MLSN007 <manuel.no.007@gmail.com>
+Requires-Python: >=3.12
+Requires-Dist: instagrapi~=2.1.2
+Requires-Dist: hikerapi
+Requires-Dist: requests
+Requires-Dist: beautifulsoup4~=4.12.3

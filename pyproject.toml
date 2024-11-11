@@ -1,1 +1,21 @@
- 
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sn-libraries"
+version = "0.1.0"
+description = "manu's sn-libraries"
+authors = [
+    {name = "MLSN007", email = "manuel.no.007@gmail.com"},
+]
+dependencies = [
+    "instagrapi~=2.1.2",
+    "hikerapi",
+    "requests",
+    "beautifulsoup4~=4.12.3",
+]
+requires-python = ">=3.12"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
