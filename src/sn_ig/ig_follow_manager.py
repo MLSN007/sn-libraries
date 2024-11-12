@@ -18,21 +18,21 @@ MAX_RESULTS = 500
 MAX_FOLLOWS_PER_DAY = 50
 BASE_FOLLOW_DELAY = 60
 
+
 class IgFollowManager:
-        """A class for managing Instagram followings using the HikerAPI and Instagrapi.
+    """A class for managing Instagram followings using the HikerAPI and Instagrapi.
 
-        Attributes:
-            hiker_client (Client): An instance of the HikerAPI client.
-            insta_client (IgClient): An instance of the IgClient.
+    Attributes:
+        hiker_client (Client): An instance of the HikerAPI client.
+        insta_client (IgClient): An instance of the IgClient.
 
-        Args:
-            hiker_api_key (str, optional): Your HikerAPI key. Defaults to the value of the environment variable "HikerAPI_key".
-            insta_client (IgClient, optional): An IgClient instance. If not provided, a new instance is created.
+    Args:
+        hiker_api_key (str, optional): Your HikerAPI key. Defaults to the value of the environment variable "HikerAPI_key".
+        insta_client (IgClient, optional): An IgClient instance. If not provided, a new instance is created.
 
-        Raises:
-            ValueError: If the "HikerAPI_key" environment variable is not set.
-        """
-
+    Raises:
+        ValueError: If the "HikerAPI_key" environment variable is not set.
+    """
 
     def __init__(self, hiker_api_key: Optional[str] = os.environ.get("HikerAPI_key"), insta_client: Optional[IgClient] = None) -> None:
         if not hiker_api_key:
@@ -57,7 +57,6 @@ class IgFollowManager:
             ValueError: If neither `user_id` nor `username` is provided.
             Exception: For any other unexpected errors during data fetching.
         """
-
         if not user_id and not username:
             raise ValueError("Either user_id or username must be provided.")
 
@@ -78,7 +77,7 @@ class IgFollowManager:
             return extracted_following
 
         except Exception as e:
-            logging.error("Error fetching following data: %s", e)
+            logger.error("Error fetching following data: %s", e)
             return []
 
     def follow_users(self, user_ids: List[int], follow_delay: int = BASE_FOLLOW_DELAY, max_follows_per_day: int = MAX_FOLLOWS_PER_DAY) -> None:
@@ -92,20 +91,20 @@ class IgFollowManager:
         followed_count = 0
         for user_id in user_ids:
             if followed_count >= max_follows_per_day:
-                logging.info("Reached maximum follows per day limit. Stopping for today.")
+                logger.info("Reached maximum follows per day limit. Stopping for today.")
                 break
 
             try:
                 self.insta_client.client.user_follow(user_id)
-                logging.info("Followed user with ID: %s", user_id)
+                logger.info("Followed user with ID: %s", user_id)
                 followed_count += 1
 
                 random_delay = random.uniform(follow_delay * 0.8, follow_delay * 1.3)
-                logging.info(f"Waiting for {random_delay:.2f} seconds before next follow...")
+                logger.info("Waiting for %.2f seconds before next follow...", random_delay)
                 time.sleep(random_delay)
 
             except Exception as e:
-                logging.error("Error following user with ID %s: %s", user_id, e)
+                logger.error("Error following user with ID %s: %s", user_id, e)
 
     def save_following_data(self, following_data: List[Dict], username: str, output_file: Optional[str] = None) -> None:
         """Saves the following data to a JSON file.
@@ -120,4 +119,4 @@ class IgFollowManager:
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(following_data, f, ensure_ascii=False, indent=4)
-        logging.info("Saved following data to %s", output_file)
+        logger.info("Saved following data to %s", output_file)

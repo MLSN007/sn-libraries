@@ -38,7 +38,7 @@ class ProxyTester:
         """
         self.account_id: str = account_id
         self.proxy_manager: ProxyManager = ProxyManager()
-        self.ig_client: IgClient = IgClient(account_id)
+        self.ig_client: IgClient = IgClient(account_id, proxy_manager=self.proxy_manager)
         self.rotations: int = int(os.getenv("PROXY_ROTATIONS", 3))
         logger.info("Configured to perform %d proxy rotations", self.rotations)
 

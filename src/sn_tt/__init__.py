@@ -1,5 +1,9 @@
 """
-sn_tt package.
+sn_tt
+
+TikTok API integration and content management
 """
 
-__all__ = []
+__all__ = [
+
+]

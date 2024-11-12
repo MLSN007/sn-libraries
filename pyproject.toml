@@ -5,7 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sn_libraries"
 version = "0.1.0"
-description = "manu's sn_libraries"
+description = "Social Network Integration Libraries"
+readme = "README.md"
 authors = [
     {name = "MLSN007", email = "manuel.no.007@gmail.com"},
 ]
@@ -18,8 +19,15 @@ dependencies = [
 ]
 requires-python = ">=3.12"
 
-[tool.setuptools]
-package-dir = {"" = "src"}  # This maps the src directory as the root package
-
 [tool.setuptools.packages.find]
-where = ["src"]  # Look for packages under src
+where = ["src"]
+include = ["*"]
+namespaces = true
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+multi-line-output = 3

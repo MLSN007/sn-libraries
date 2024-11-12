@@ -3,83 +3,134 @@ Script to automatically update __init__.py files across the project.
 """
 
 import os
-import re
+import ast
+import logging
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
-import ast
 
-def get_class_names(file_path: Path) -> List[str]:
-    """Extract only class names from a Python file using AST."""
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def get_exportable_names(file_path: Path) -> List[str]:
+    """
+    Extract exportable names from a Python file using AST.
+    Only extracts classes and explicitly marked exports.
+    
+    Args:
+        file_path (Path): Path to the Python file
+        
+    Returns:
+        List[str]: List of exportable names
+    """
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             tree = ast.parse(file.read())
             
-        return [node.name for node in ast.walk(tree) 
-                if isinstance(node, ast.ClassDef)]
+        exports = set()
+        
+        for node in ast.walk(tree):
+            # Get class definitions
+            if isinstance(node, ast.ClassDef):
+                exports.add(node.name)
+            # Get explicitly marked exports (variables with type annotations)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                if node.target.id.isupper() or node.target.id.startswith('__'):
+                    exports.add(node.target.id)
+                    
+        return sorted(list(exports))
     except Exception as e:
-        print(f"Error parsing {file_path}: {e}")
+        logger.error("Error parsing %s: %s", file_path, e)
         return []
 
 def get_python_files(directory: Path) -> List[Tuple[str, List[str]]]:
-    """Get all Python files in a directory and extract their class names."""
+    """
+    Get all Python files in a directory and their exportable names.
+    
+    Args:
+        directory (Path): Directory to scan
+        
+    Returns:
+        List[Tuple[str, List[str]]]: List of (filename, exports) tuples
+    """
     python_files = []
     
     for file in directory.glob("*.py"):
         if file.name == "__init__.py":
             continue
             
-        class_names = get_class_names(file)
-        if class_names:
-            python_files.append((file.name, class_names))
+        exports = get_exportable_names(file)
+        if exports:
+            python_files.append((file.name, exports))
             
-    return python_files
+    return sorted(python_files)
 
 def generate_init_content(package_name: str, files: List[Tuple[str, List[str]]]) -> str:
-    """Generate content for __init__.py file."""
-    imports = []
+    """
+    Generate content for __init__.py file.
+    """
+    package_descriptions = {
+        'proxy_services': 'Proxy management and rotation services',
+        'sn_ig': 'Instagram API integration and content management',
+        'sn_fb': 'Facebook API integration and content management',
+        'sn_tt': 'TikTok API integration and content management',
+        'sn_yt': 'YouTube API integration and content management',
+        'sn_utils': 'Shared utilities and helper functions',
+        'gen_ai': 'AI and ML integration services'
+    }
+    
+    description = package_descriptions.get(package_name, f'{package_name} functionality')
+    
+    content = f'"""\n{package_name}\n\n{description}\n"""\n\n'
+    
+    # Collect all exports and imports
     all_exports = []
+    imports = []
     
-    # First, collect all class names to be exported
-    for file_name, class_names in sorted(files):
-        for class_name in sorted(class_names):
-            all_exports.append(class_name)
+    for file_name, exports in files:
+        module_name = file_name[:-3]
+        for export in exports:
+            all_exports.append(export)
+            imports.append(f"from .{module_name} import {export}")
     
-    # Then create the __all__ list first
-    content = f'"""\n{package_name} package.\n"""\n\n'
+    # Add imports if any exist
+    if imports:
+        content += "# Classes and Types\n"
+        content += "\n".join(sorted(imports))
+        content += "\n\n"
+    
+    # Add __all__
     content += "__all__ = [\n"
     content += ",\n".join(f'    "{name}"' for name in sorted(all_exports))
-    content += "\n]\n\n"
-    
-    # Finally add the imports
-    for file_name, class_names in sorted(files):
-        module_name = file_name[:-3]  # Remove .py extension
-        for class_name in sorted(class_names):
-            imports.append(f"from .{module_name} import {class_name}")
-    
-    content += "\n".join(imports)
-    content += "\n"
+    content += "\n]\n"
     
     return content
 
-def main():
+def main() -> None:
     """Main function to update all __init__.py files."""
     root_dir = Path(__file__).parent
     src_dir = root_dir / "src"
+    
+    if not src_dir.exists():
+        raise FileNotFoundError(f"Source directory {src_dir} does not exist")
     
     for package_dir in src_dir.iterdir():
         if not package_dir.is_dir() or package_dir.name.startswith("__"):
             continue
             
-        files = get_python_files(package_dir)
-        
-        content = generate_init_content(package_dir.name, files) if files else \
-                 f'"""\n{package_dir.name} package.\n"""\n\n__all__ = []\n'
-        
-        init_file = package_dir / "__init__.py"
-        with open(init_file, "w", encoding="utf-8") as f:
-            f.write(content)
+        try:
+            files = get_python_files(package_dir)
+            content = generate_init_content(package_dir.name, files)
             
-    print("Successfully updated all __init__.py files")
+            init_file = package_dir / "__init__.py"
+            with open(init_file, "w", encoding='utf-8') as f:
+                f.write(content)
+                
+            logger.info("Successfully updated %s", init_file)
+            print(f"Created/Modified: {init_file.absolute()}")
+                
+        except Exception as e:
+            logger.error("Error updating %s: %s", package_dir.name, e)
 
 if __name__ == "__main__":
     main()

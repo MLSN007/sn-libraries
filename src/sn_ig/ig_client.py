@@ -31,7 +31,7 @@ class IgClient:
         proxy_manager (ProxyManager): Manager for proxy operations
     """
 
-    def __init__(self, account_id: str):
+    def __init__(self, account_id: str, proxy_manager: Optional[ProxyManager] = None):
         """
         Initialize Instagram client with account credentials.
 
@@ -45,7 +45,7 @@ class IgClient:
         self.config = IgConfig(account_id)
 
         # Initialize proxy manager
-        self.proxy_manager = ProxyManager()
+        self.proxy_manager = proxy_manager or ProxyManager()
 
         # Initialize client
         self.client = Client()

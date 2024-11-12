@@ -1,5 +1,9 @@
 """
-sn_yt package.
+sn_yt
+
+YouTube API integration and content management
 """
 
-__all__ = []
+__all__ = [
+
+]

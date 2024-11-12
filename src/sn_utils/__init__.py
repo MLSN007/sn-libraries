@@ -1,5 +1,9 @@
 """
-sn_utils package.
+sn_utils
+
+Shared utilities and helper functions
 """
 
-__all__ = []
+__all__ = [
+
+]

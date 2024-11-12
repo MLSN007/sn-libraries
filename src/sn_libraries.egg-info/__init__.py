@@ -1,5 +1,9 @@
 """
-sn_libraries.egg-info package.
+sn_libraries.egg-info
+
+sn_libraries.egg-info functionality
 """
 
-__all__ = []
+__all__ = [
+
+]
