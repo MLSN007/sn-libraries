@@ -3,9 +3,9 @@ requires = ["setuptools>=64.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sn-libraries"
+name = "sn_libraries"
 version = "0.1.0"
-description = "manu's sn-libraries"
+description = "manu's sn_libraries"
 authors = [
     {name = "MLSN007", email = "manuel.no.007@gmail.com"},
 ]
@@ -14,8 +14,12 @@ dependencies = [
     "hikerapi",
     "requests",
     "beautifulsoup4~=4.12.3",
+    "python-dotenv",
 ]
 requires-python = ">=3.12"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = {"" = "src"}  # This maps the src directory as the root package
+
+[tool.setuptools.packages.find]
+where = ["src"]  # Look for packages under src

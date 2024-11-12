@@ -2,6 +2,8 @@ README.md
 pyproject.toml
 setup.py
 src/gen_ai/__init__.py
+src/proxy_services/__init__.py
+src/proxy_services/proxy_manager.py
 src/sn_libraries.egg-info/PKG-INFO
 src/sn_libraries.egg-info/SOURCES.txt
 src/sn_libraries.egg-info/dependency_links.txt
