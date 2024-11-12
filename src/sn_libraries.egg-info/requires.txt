@@ -1,5 +1,0 @@
-instagrapi~=2.1.2
-hikerapi
-requests
-beautifulsoup4~=4.12.3
-python-dotenv

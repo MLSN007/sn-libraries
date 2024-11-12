@@ -1,3 +1,0 @@
-gen_ai
-proxy_services
-sn_main
