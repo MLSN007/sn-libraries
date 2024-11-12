@@ -1,25 +1,27 @@
-from .fbapiclient import FbApiClient
-from .fbcommentmanager import FbCommentManager
-from .fbconfigloader import FbConfigLoader
-from .fbcreatejsonconfig import FbCreateJsonConfig
-from .fbpostcomposer import FbPostComposer
-from .fbpostmanager import FbPostManager
-from .fbposttracker import FbPostTracker
-from .fbpublishingorchestrator import FbPublishingOrchestrator
-from .fbscraper import FbScraper
-from .fbutils import FbUtils
-from .publishingorchestrator import PublishingOrchestrator
+"""
+sn_fb package.
+"""
 
 __all__ = [
     "FbApiClient",
     "FbCommentManager",
     "FbConfigLoader",
-    "FbCreateJsonConfig",
     "FbPostComposer",
     "FbPostManager",
     "FbPostTracker",
     "FbPublishingOrchestrator",
     "FbScraper",
     "FbUtils",
-    "PublishingOrchestrator",
+    "PublishingOrchestrator"
 ]
+
+from .fb_api_client import FbApiClient
+from .fb_comment_manager import FbCommentManager
+from .fb_config_loader import FbConfigLoader
+from .fb_post_composer import FbPostComposer
+from .fb_post_manager import FbPostManager
+from .fb_post_tracker import FbPostTracker
+from .fb_publishing_orchestrator import FbPublishingOrchestrator
+from .fb_scraper import FbScraper
+from .fb_utils import FbUtils
+from .publishing_orchestrator import PublishingOrchestrator

@@ -1,4 +1,5 @@
+"""
+sn_utils package.
+"""
 
-
-__all__ = [
-]
+__all__ = []
