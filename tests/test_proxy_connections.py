@@ -12,7 +12,8 @@ from typing import Dict, Optional, Set
 from pathlib import Path
 from dotenv import load_dotenv
 import requests
-from sn_libraries import ProxyManager, IgClient
+from sn_libraries import ProxyManager
+from sn_libraries import IgClient
 
 
 # Load environment variables
