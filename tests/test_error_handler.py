@@ -4,7 +4,7 @@ Test suite for error handling functionality.
 
 import unittest
 import logging
-from src.error_handler import ErrorHandler
+from sn_utils import ErrorHandler
 
 # Configure logging
 logging.basicConfig(

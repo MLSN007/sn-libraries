@@ -4,7 +4,7 @@ Update existing content records with their Google Sheet row numbers.
 
 import sqlite3
 import logging
-from google_sheets_handler import GoogleSheetsHandler
+from google_services import GoogleSheetsHandler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

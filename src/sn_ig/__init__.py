@@ -5,6 +5,7 @@ Instagram API integration and content management
 """
 
 # Classes and Types
+from .error_handler import ErrorHandler
 from .ig_client import IgClient
 from .ig_config import IgConfig
 from .ig_content_publisher import IgContentPublisher
@@ -21,6 +22,7 @@ from .ig_utils import IgUtils
 from .post_composer import PostComposer
 
 __all__ = [
+    "ErrorHandler",
     "IgClient",
     "IgCommentData",
     "IgConfig",

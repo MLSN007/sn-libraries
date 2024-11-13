@@ -7,6 +7,9 @@ import argparse
 import logging
 from typing import Optional
 
+from sn_ig import IgContentPublisher
+from google_services import GoogleSheetsHandler
+
 def add_error_column(db_path: str) -> None:
     """Add error_message column if it doesn't exist."""
     try:
@@ -35,15 +38,15 @@ def run_workflow(account_id: str, sync_only: bool = False) -> None:
         add_error_column(db_path)
         
         # 2. Sync with Google Sheet
-        from notebooks.main_programs.main_ig_gs_handling import main as sync_main
+        from sn_ig import IgGSHandling
         logging.info("Starting Google Sheet sync...")
-        sync_main()
+        IgGSHandling(account_id).sync_data()
         
         # 3. Publish content (if not sync_only)
         if not sync_only:
-            from notebooks.main_programs.main_ig_publisher import main as publish_main
+            publisher = IgContentPublisher(account_id)
             logging.info("Starting content publishing...")
-            publish_main()
+            publisher.process_pending_content()
             
     except Exception as e:
         logging.error(f"Workflow error: {e}")

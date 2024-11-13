@@ -8,14 +8,16 @@ logging for better feedback.
 import os
 import logging
 from typing import Optional
-from instagrapi import Client
-from instagrapi.exceptions import ClientLoginRequired, ClientError, UserNotFound
 from pathlib import Path
-from sn_ig import IgConfig
-from proxy_services import ProxyManager
 import time
 import random
 import requests
+
+from instagrapi import Client
+from instagrapi.exceptions import ClientLoginRequired, ClientError, UserNotFound
+
+from .ig_config import IgConfig
+from proxy_services import ProxyManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

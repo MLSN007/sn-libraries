@@ -11,7 +11,7 @@ import signal
 import os
 from typing import Optional, Any
 from types import FrameType
-from ig_content_publisher import IgContentPublisher
+from sn_ig import IgContentPublisher
 
 
 # Add this filter class

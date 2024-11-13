@@ -1,8 +1,8 @@
 from typing import Optional, Dict, Any, List
-from google_sheets_handler import GoogleSheetsHandler
 from datetime import datetime
 import logging
 
+from google_services import GoogleSheetsHandler
 
 logger = logging.getLogger(__name__)
 

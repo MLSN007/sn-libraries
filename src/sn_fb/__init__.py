@@ -5,6 +5,7 @@ Facebook API integration and content management
 """
 
 # Classes and Types
+from .config_loader import ConfigLoader
 from .fb_api_client import FbApiClient
 from .fb_comment_manager import FbCommentManager
 from .fb_config_loader import FbConfigLoader
@@ -17,6 +18,7 @@ from .fb_utils import FbUtils
 from .publishing_orchestrator import PublishingOrchestrator
 
 __all__ = [
+    "ConfigLoader",
     "FbApiClient",
     "FbCommentManager",
     "FbConfigLoader",

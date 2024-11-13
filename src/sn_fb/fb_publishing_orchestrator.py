@@ -1,7 +1,8 @@
 from typing import Dict, Any, Optional
-from fb_post_tracker import FbPostTracker
-from fb_post_manager import FbPostManager
 import logging
+
+from .fb_post_tracker import FbPostTracker
+from .fb_post_manager import FbPostManager
 
 logger = logging.getLogger(__name__)
 

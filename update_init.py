@@ -76,7 +76,8 @@ def generate_init_content(package_name: str, files: List[Tuple[str, List[str]]])
         'sn_tt': 'TikTok API integration and content management',
         'sn_yt': 'YouTube API integration and content management',
         'sn_utils': 'Shared utilities and helper functions',
-        'gen_ai': 'AI and ML integration services'
+        'gen_ai': 'AI and ML integration services',
+        'google_services': 'Google API integration and service management'
     }
     
     description = package_descriptions.get(package_name, f'{package_name} functionality')
@@ -88,7 +89,7 @@ def generate_init_content(package_name: str, files: List[Tuple[str, List[str]]])
     imports = []
     
     for file_name, exports in files:
-        module_name = file_name[:-3]
+        module_name = file_name[:-3]  # Remove .py extension
         for export in exports:
             all_exports.append(export)
             imports.append(f"from .{module_name} import {export}")
@@ -100,9 +101,10 @@ def generate_init_content(package_name: str, files: List[Tuple[str, List[str]]])
         content += "\n\n"
     
     # Add __all__
-    content += "__all__ = [\n"
-    content += ",\n".join(f'    "{name}"' for name in sorted(all_exports))
-    content += "\n]\n"
+    if all_exports:
+        content += "__all__ = [\n"
+        content += ",\n".join(f'    "{name}"' for name in sorted(all_exports))
+        content += "\n]\n"
     
     return content
 
@@ -114,13 +116,27 @@ def main() -> None:
     if not src_dir.exists():
         raise FileNotFoundError(f"Source directory {src_dir} does not exist")
     
-    for package_dir in src_dir.iterdir():
-        if not package_dir.is_dir() or package_dir.name.startswith("__"):
+    # List of packages to process
+    packages = [
+        'proxy_services',
+        'sn_ig',
+        'sn_fb',
+        'sn_tt',
+        'sn_yt',
+        'sn_utils',
+        'gen_ai',
+        'google_services'
+    ]
+    
+    for package_name in packages:
+        package_dir = src_dir / package_name
+        if not package_dir.exists() or not package_dir.is_dir():
+            logger.warning(f"Package directory {package_name} not found, skipping...")
             continue
             
         try:
             files = get_python_files(package_dir)
-            content = generate_init_content(package_dir.name, files)
+            content = generate_init_content(package_name, files)
             
             init_file = package_dir / "__init__.py"
             with open(init_file, "w", encoding='utf-8') as f:
@@ -130,7 +146,7 @@ def main() -> None:
             print(f"Created/Modified: {init_file.absolute()}")
                 
         except Exception as e:
-            logger.error("Error updating %s: %s", package_dir.name, e)
+            logger.error("Error updating %s: %s", package_name, e)
 
 if __name__ == "__main__":
     main()

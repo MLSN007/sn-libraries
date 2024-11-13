@@ -13,11 +13,10 @@ from typing import Dict, Any, Optional
 import requests
 import re
 from bs4 import BeautifulSoup
-from fb_api_client import FbApiClient
+from .fb_api_client import FbApiClient
 
-
-logging.basicConfig(level=logging.DEBUG)  # Set the logging level to DEBUG
-
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 class FbUtils:
     """A class containing utility functions for Facebook API interactions.

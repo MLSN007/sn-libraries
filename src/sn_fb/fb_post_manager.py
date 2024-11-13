@@ -34,9 +34,8 @@ import requests
 import os
 import traceback
 import random
-from fb_api_client import FbApiClient
-from fb_post_composer import FbPostComposer
 import logging
+
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -45,10 +44,12 @@ from tenacity import (
 )
 from requests.exceptions import RequestException
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
+from facebook_business import api as FacebookAdsApi
+from facebook_business.adobjects import adaccount as AdAccount
+from facebook_business.adobjects import advideo as AdVideo
 
-from facebook_business.api import FacebookAdsApi
-from facebook_business.adobjects.adaccount import AdAccount
-from facebook_business.adobjects.advideo import AdVideo
+from .fb_api_client import FbApiClient
+from .fb_post_composer import FbPostComposer
 
 logger = logging.getLogger(__name__)
 

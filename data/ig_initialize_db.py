@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 
 def create_tables():
@@ -6,12 +7,8 @@ def create_tables():
     Creates the necessary tables in the SQLite database with appropriate
     data types, foreign key constraints, and indexing for optimization.
     """
-    # -------------------------------------------------------------------------
-    conn = sqlite3.connect(
-        r"C:\Users\manue\Documents\GitHub007\sn-libraries\data\JK_ig.db"
-    )  # Replace with your database name  # ------------------------
-    # -------------------------------------------------------------------------
-
+    db_path = Path(__file__).parent / "JK_ig.db"
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     # Create the 'content' table with appropriate data types and constraints

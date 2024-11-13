@@ -29,7 +29,7 @@ from instagrapi.exceptions import (
     ClientNotFoundError,
     UserNotFound,
 )
-from ig_data import IgPostData
+from .ig_data import IgPostData
 import sqlite3
 
 

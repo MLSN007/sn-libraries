@@ -1,9 +1,9 @@
 import logging
 import random
 from typing import Optional, List, Dict, Any
-from google_sheets_handler import GoogleSheetsHandler
-from ig_utils import IgUtils, get_db_connection
-from ig_client import IgClient
+from google_services import GoogleSheetsHandler
+from .ig_utils import IgUtils, get_db_connection
+from .ig_client import IgClient
 import traceback
 
 logging.basicConfig(level=logging.DEBUG)  # Change level to DEBUG

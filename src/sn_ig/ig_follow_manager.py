@@ -12,7 +12,7 @@ import time
 import random
 from typing import List, Dict, Optional
 from hikerapi import Client
-from ig_client import IgClient
+from .ig_client import IgClient
 
 MAX_RESULTS = 500
 MAX_FOLLOWS_PER_DAY = 50

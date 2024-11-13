@@ -21,9 +21,9 @@ from typing import List, Any, Optional, Dict, Union
 from pathlib import Path
 from instagrapi.exceptions import ClientError, MediaError
 from instagrapi.types import Location, StoryHashtag, StoryLink, StoryMention, StorySticker, Media, Track, UserShort
-from ig_client import IgClient
-from ig_utils import IgUtils
-from ig_data import IgPostData
+from .ig_client import IgClient
+from .ig_utils import IgUtils
+from .ig_data import IgPostData
 
 
 

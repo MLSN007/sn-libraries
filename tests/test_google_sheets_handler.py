@@ -8,16 +8,9 @@ import logging
 import warnings
 import tracemalloc
 from pathlib import Path
-from src.google_sheets_handler import GoogleSheetsHandler
 import json
 
-# Suppress all ResourceWarnings in tests
-warnings.filterwarnings('ignore', category=ResourceWarning)
-# Suppress oauth2client warnings
-warnings.filterwarnings(
-    "ignore", 
-    message="file_cache is only supported with oauth2client<4.0.0"
-)
+from google_services import GoogleSheetsHandler
 
 # Configure logging
 logging.basicConfig(

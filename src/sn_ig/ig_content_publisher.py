@@ -13,8 +13,6 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple, cast
 from io import BytesIO
 import time
-from googleapiclient.discovery import Resource
-from googleapiclient.http import MediaIoBaseDownload
 import tempfile
 import shutil
 from pathlib import Path
@@ -23,11 +21,15 @@ import json
 import random
 import requests
 
-from ig_client import IgClient
-from ig_post_manager import IgPostManager
-from ig_utils import IgUtils
-from google_sheets_handler import GoogleSheetsHandler
-from ig_gs_handling import IgGSHandling
+from googleapiclient.discovery import Resource
+from googleapiclient.http import MediaIoBaseDownload
+
+from .ig_client import IgClient
+from .ig_post_manager import IgPostManager
+from .ig_utils import IgUtils
+from .ig_gs_handling import IgGSHandling
+from google_services import GoogleSheetsHandler
+from proxy_services import ProxyManager
 from instagrapi.types import (
     Media,
     Location,
@@ -971,7 +973,7 @@ class IgContentPublisher:
                             hashtag = Hashtag(
                                 name=clean_tag,
                                 id=hashtag_info.id,
-                                media_count=hashtag_info.media_count,
+                                media_count=hashtag_info.media_count
                             )
                             story_hashtags.append(
                                 StoryHashtag(
@@ -979,13 +981,13 @@ class IgContentPublisher:
                                     x=0.5,
                                     y=0.3 + (idx * 0.1),
                                     width=0.5,
-                                    height=0.1,
+                                    height=0.1
                                 )
                             )
                     except Exception as e:
                         logger.warning(f"Failed to process hashtag {clean_tag}: {e}")
 
-            # Prepare links
+            # Prepare links  
             story_links = []
             if content.get("link"):
                 try:

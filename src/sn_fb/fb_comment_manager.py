@@ -3,6 +3,8 @@
 import requests
 from typing import List, Dict, Any, Optional
 
+from .fb_api_client import FbApiClient
+
 
 class FbCommentManager:
     """A class for managing Facebook comment-related actions.
@@ -15,7 +17,7 @@ class FbCommentManager:
             Facebook Graph API interactions.
     """
 
-    def __init__(self, api_client: "FbApiClient") -> None:
+    def __init__(self, api_client: FbApiClient) -> None:
         self.api_client = api_client
 
     def get_post_comments(
