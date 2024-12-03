@@ -26,6 +26,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Set up debug logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Add this before creating ProxyManager
+logger.debug("Current proxy list content:")
+with open("proxy_list.txt", "r") as f:
+    logger.debug(f.read())
+
 
 class ProxyTester:
     """Class to manage proxy testing operations."""

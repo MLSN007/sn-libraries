@@ -53,7 +53,8 @@ class ProxyManager:
             raise ValueError("Proxy credentials not found in environment variables")
 
         # Initialize other attributes
-        self.proxy_file_path: Path = Path(__file__).parent.parent / "proxy_list.txt"
+        self.proxy_file_path: Path = Path(__file__).parent.parent.parent / "proxy_list.txt"
+        logger.info(f"Looking for proxy list at: {self.proxy_file_path}")
         self.last_rotation_time: float = time.time()
         self.rotation_interval: int = 25 * 60  # 25 minutes
         self.proxy_list: List[str] = []
@@ -191,14 +192,18 @@ class ProxyManager:
         Get the current proxy configuration in requests format.
         
         Returns:
-            Dict[str, str]: Dictionary with 'http' and 'https' proxy configurations
+            Dict[str, str]: Dictionary with HTTP/HTTPS proxy configurations
         """
         if not self.current_proxy:
             raise ValueError("No proxy currently set")
         
+        # Format: username:password@host:port
+        proxy_url = f"http://{self.current_proxy}"
+        logger.debug(f"Using proxy URL: {proxy_url}")
+        
         return {
-            'http': f'http://{self.current_proxy}',    # Change from socks5:// to http://
-            'https': f'http://{self.current_proxy}'    # Change from socks5:// to http://
+            'http': proxy_url,
+            'https': proxy_url
         }
 
     def should_rotate(self) -> bool:
@@ -231,14 +236,18 @@ class ProxyManager:
         """
         try:
             proxies = self.get_current_proxies()
+            logger.debug("Testing connection with proxies: %s", proxies)
             
-            # Explicitly configure for HTTP/HTTPS
+            # Create a session with specific settings
             session = requests.Session()
+            session.trust_env = False  # Don't use environment proxies
+            
             response = session.get(
                 'http://ip-api.com/json',
                 proxies=proxies,
                 timeout=30,
-                verify=True
+                verify=True,
+                allow_redirects=True
             )
             
             if response.status_code == 200:
@@ -248,11 +257,12 @@ class ProxyManager:
                            data.get('city'), 
                            data.get('country'))
                 return True
-            
+                
+            logger.error(f"Invalid response status: {response.status_code}")
             return False
             
         except Exception as e:
-            logger.error("Error validating connection: %s", e)
+            logger.error("Error validating connection: %s", str(e))
             return False
 
     def get_fresh_proxy_list(self, sessions: Optional[List[str]] = None) -> List[str]:
@@ -342,12 +352,19 @@ class ProxyManager:
         """
         try:
             # Split the proxy line into components
-            host, port, username, password_with_config = proxy_line.split(':')
+            parts = proxy_line.strip().split(':')
+            if len(parts) != 4:
+                raise ValueError(f"Invalid proxy format. Expected 4 parts, got {len(parts)}")
+                
+            host, port, username, password_with_config = parts
+            logger.debug(f"Formatting proxy - Host: {host}, Port: {port}")
+            
             # Format into standard proxy URL format
             return f"{username}:{password_with_config}@{host}:{port}"
-        except ValueError as e:
-            logger.error("Invalid proxy format in line: %s", proxy_line)
-            raise ValueError(f"Invalid proxy format: {e}")
+            
+        except Exception as e:
+            logger.error(f"Error formatting proxy string: {str(e)}")
+            raise
 
     def get_current_proxies(self) -> Dict[str, str]:
         """
@@ -359,8 +376,10 @@ class ProxyManager:
         if not self.current_proxy:
             raise ValueError("No proxy currently set")
         
-        # Explicitly format as HTTP proxy
+        # Format: username:password@host:port
         proxy_url = f"http://{self.current_proxy}"
+        logger.debug(f"Using proxy URL: {proxy_url}")
+        
         return {
             'http': proxy_url,
             'https': proxy_url
