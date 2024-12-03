@@ -42,7 +42,7 @@ class ProxyManager:
         self.config: Dict[str, str] = config or {
             "country_code": os.getenv("PROXY_COUNTRY_CODE", "ES"),
             "country_name": os.getenv("PROXY_COUNTRY_NAME", "Spain"),
-            "city": os.getenv("PROXY_CITY", "huelva").lower(),
+            "city": os.getenv("PROXY_CITY", "madrid").lower(),
             "lifetime": os.getenv("PROXY_LIFETIME", "30m"),
             "streaming": os.getenv("PROXY_STREAMING", "1")
         }
@@ -187,14 +187,20 @@ class ProxyManager:
         """
         return self.current_proxy
 
-    def get_current_proxies(self) -> Optional[Dict[str, str]]:
+    def get_current_proxies(self) -> Dict[str, str]:
         """
-        Get the current proxies dictionary.
-
+        Get the current proxy configuration in requests format.
+        
         Returns:
-            Optional[Dict[str, str]]: The current proxies dictionary if set, else None.
+            Dict[str, str]: Dictionary with 'http' and 'https' proxy configurations
         """
-        return self.current_proxies
+        if not self.current_proxy:
+            raise ValueError("No proxy currently set")
+        
+        return {
+            'http': f'http://{self.current_proxy}',    # Change from socks5:// to http://
+            'https': f'http://{self.current_proxy}'    # Change from socks5:// to http://
+        }
 
     def should_rotate(self) -> bool:
         """

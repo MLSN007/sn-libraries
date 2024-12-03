@@ -84,34 +84,37 @@ def generate_init_content(package_name: str, files: List[Tuple[str, List[str]]])
     
     content = f'"""\n{package_name}\n\n{description}\n"""\n\n'
     
-    # Collect all exports and imports
-    all_exports = []
-    imports = []
-    
-    for file_name, exports in files:
-        module_name = file_name[:-3]  # Remove .py extension
-        for export in exports:
-            all_exports.append(export)
-            imports.append(f"from .{module_name} import {export}")
-    
-    # Add imports if any exist
-    if imports:
+    # Add imports
+    if files:
         content += "# Classes and Types\n"
+        imports = []
+        all_exports = []
+        
+        for file_name, exports in files:
+            module_name = file_name[:-3]
+            for export in exports:
+                imports.append(f"from .{module_name} import {export}")
+                all_exports.append(export)
+                
         content += "\n".join(sorted(imports))
         content += "\n\n"
-    
-    # Add __all__
-    if all_exports:
-        content += "__all__ = [\n"
-        content += ",\n".join(f'    "{name}"' for name in sorted(all_exports))
-        content += "\n]\n"
+        
+        # Add __all__
+        if all_exports:
+            content += "__all__ = [\n"
+            content += ",\n".join(f'    "{name}"' for name in sorted(all_exports))
+            content += "\n]\n"
     
     return content
 
 def main() -> None:
     """Main function to update all __init__.py files."""
+    # Get the current file's directory (which should be the project root)
     root_dir = Path(__file__).parent
     src_dir = root_dir / "src"
+    
+    logger.info(f"Current directory: {root_dir.absolute()}")
+    logger.info(f"Looking for src directory in: {src_dir.absolute()}")
     
     if not src_dir.exists():
         raise FileNotFoundError(f"Source directory {src_dir} does not exist")
@@ -136,13 +139,16 @@ def main() -> None:
             
         try:
             files = get_python_files(package_dir)
+            if not files:
+                logger.warning(f"No Python files with exportable names found in {package_name}")
+                continue
+                
             content = generate_init_content(package_name, files)
             
             init_file = package_dir / "__init__.py"
             with open(init_file, "w", encoding='utf-8') as f:
                 f.write(content)
-                
-            logger.info("Successfully updated %s", init_file)
+            logger.info(f"Successfully updated {init_file}")
             print(f"Created/Modified: {init_file.absolute()}")
                 
         except Exception as e:

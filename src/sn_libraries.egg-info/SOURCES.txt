@@ -2,9 +2,14 @@ README.md
 pyproject.toml
 setup.py
 src/gen_ai/__init__.py
+src/google_services/__init__.py
+src/google_services/google_api_types.py
+src/google_services/google_sheets_handler.py
+src/google_services/google_sheets_rw.py
 src/proxy_services/__init__.py
 src/proxy_services/proxy_manager.py
 src/sn_fb/__init__.py
+src/sn_fb/config_loader.py
 src/sn_fb/fb_api_client.py
 src/sn_fb/fb_comment_manager.py
 src/sn_fb/fb_config_loader.py
@@ -17,6 +22,7 @@ src/sn_fb/fb_scraper.py
 src/sn_fb/fb_utils.py
 src/sn_fb/publishing_orchestrator.py
 src/sn_ig/__init__.py
+src/sn_ig/error_handler.py
 src/sn_ig/ig_client.py
 src/sn_ig/ig_config.py
 src/sn_ig/ig_content_publisher.py
@@ -36,6 +42,7 @@ src/sn_libraries.egg-info/requires.txt
 src/sn_libraries.egg-info/top_level.txt
 src/sn_tt/__init__.py
 src/sn_utils/__init__.py
+src/sn_utils/html_filter.py
 src/sn_yt/__init__.py
 tests/test_error_handler.py
 tests/test_google_sheets_handler.py
