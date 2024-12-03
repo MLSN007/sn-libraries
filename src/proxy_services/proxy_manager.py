@@ -15,6 +15,11 @@ import json
 
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
 
 class ProxyManager:
     """Manages all proxy-related operations."""
@@ -29,21 +34,16 @@ class ProxyManager:
         """
         load_dotenv()  # Load environment variables
 
-        # Load proxy credentials
+        # Initialize proxy credentials with all required fields
         self.proxy_credentials: Dict[str, Optional[str]] = {
             "host": os.getenv("PROXY_HOST", "geo.iproyal.com"),
-            "port": os.getenv("PROXY_PORT", "32325"),
+            "port": os.getenv("PROXY_PORT", "12321"),
             "username": os.getenv("PROXY_USERNAME"),
             "password": os.getenv("PROXY_PASSWORD"),
-            "base_sessions": os.getenv("PROXY_BASE_SESSIONS", "").split(",") if os.getenv("PROXY_BASE_SESSIONS") else []
-        }
-
-        # Load location config from environment
-        self.config: Dict[str, str] = config or {
+            "base_sessions": [],  # Initialize as empty list by default
             "country_code": os.getenv("PROXY_COUNTRY_CODE", "ES"),
-            "country_name": os.getenv("PROXY_COUNTRY_NAME", "Spain"),
-            "city": os.getenv("PROXY_CITY", "madrid").lower(),
-            "lifetime": os.getenv("PROXY_LIFETIME", "30m"),
+            "city": os.getenv("PROXY_CITY", "madrid"),
+            "lifetime": os.getenv("PROXY_LIFETIME", "60m"),
             "streaming": os.getenv("PROXY_STREAMING", "1")
         }
 
@@ -72,30 +72,29 @@ class ProxyManager:
             raise ValueError("Failed to initialize first proxy connection.")
 
     def _initialize_proxy_pool(self) -> None:
-        """
-        Initialize the pool of available proxies.
-        """
-        # Use either file-based proxies OR generated proxies, not both
-        if self.proxy_file_path.exists():
-            logger.info("Using proxies from proxy_list.txt")
-            self.proxy_list = self.load_proxy_list()
-        else:
-            logger.info("Generating proxy list from base sessions")
-            if not self.proxy_credentials["base_sessions"]:
-                logger.error("No proxy sessions configured in environment variables.")
-                raise ValueError("No proxy sessions configured in environment variables")
-
-            base_sessions = self.proxy_credentials["base_sessions"]
-            extended_sessions: List[str] = []
-
-            for session in base_sessions:
-                for i in range(5):
-                    extended_sessions.append(f"{session.strip()}_{i}")
-
-            self.proxy_list = self.get_fresh_proxy_list(extended_sessions)
-
-        self.available_proxies.extend(self.proxy_list)
-        logger.info("Initialized proxy pool with %d proxies", len(self.proxy_list))
+        """Initialize the pool of available proxies."""
+        logger.info("Initializing proxy pool")
+        
+        try:
+            # Read proxies from file
+            if self.proxy_file_path.exists():
+                with open(self.proxy_file_path, 'r') as f:
+                    self.proxy_list = [line.strip() for line in f if line.strip()]
+            else:
+                logger.warning("Proxy list file not found at: %s", self.proxy_file_path)
+                self.proxy_list = []
+                
+            if not self.proxy_list:
+                logger.error("No proxies available in proxy list")
+                raise ValueError("No proxies available")
+                
+            # Initialize the deque with all available proxies
+            self.available_proxies = deque(self.proxy_list)
+            logger.info("Initialized proxy pool with %d proxies", len(self.available_proxies))
+            
+        except Exception as e:
+            logger.error("Failed to initialize proxy pool: %s", e)
+            raise
 
     def _load_and_set_proxy(self) -> bool:
         """
@@ -127,10 +126,10 @@ class ProxyManager:
                 host, port, username, password_and_params = parts[0], parts[1], parts[2], ":".join(parts[3:])
 
                 # Format proxy strings
-                self.current_proxy = f"socks5://{username}:{password_and_params}@{host}:{port}"
+                self.current_proxy = f"{username}:{password_and_params}@{host}:{port}"
                 self.current_proxies = {
-                    "http": self.current_proxy,
-                    "https": self.current_proxy,
+                    "http": f"http://{self.current_proxy}",
+                    "https": f"http://{self.current_proxy}",
                 }
 
                 # Verify IP
@@ -225,49 +224,35 @@ class ProxyManager:
 
     def validate_connection(self) -> bool:
         """
-        Validate the current proxy connection and ensure it matches the configured location.
-
+        Validate the current proxy connection.
+        
         Returns:
-            bool: True if the connection is valid and in the correct location, False otherwise.
+            bool: True if connection is valid, False otherwise
         """
         try:
-            response = requests.get(
-                "http://ip-api.com/json",
-                proxies=self.current_proxies,
-                timeout=30
+            proxies = self.get_current_proxies()
+            
+            # Explicitly configure for HTTP/HTTPS
+            session = requests.Session()
+            response = session.get(
+                'http://ip-api.com/json',
+                proxies=proxies,
+                timeout=30,
+                verify=True
             )
-
-            data: Dict[str, Optional[str]] = response.json()
-            logger.info("Location Details:")
-            logger.info("  Country: %s", data.get("country", "Unknown"))
-            logger.info("  City: %s", data.get("city", "Unknown"))
-            logger.info("  ISP: %s", data.get("isp", "Unknown"))
-
-            # Verify country code
-            if data.get("countryCode") != self.config["country_code"]:
-                logger.error(
-                    "❌ Wrong country: %s (Expected: %s)",
-                    data.get("country", "Unknown"),
-                    self.config["country_name"]
-                )
-                return False
-
-            # Verify city if specified
-            configured_city: str = self.config.get("city", "").lower()
-            response_city: Optional[str] = data.get("city", "").lower()
-            if configured_city and response_city != configured_city:
-                logger.warning(
-                    "⚠️ Different city: %s (Expected: %s)",
-                    data.get("city", "Unknown"),
-                    self.config["city"]
-                )
-                # Don't fail on city mismatch, just warn
-
-            logger.info("✅ Location verification passed")
-            return True
-
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info("Connected via IP: %s in %s, %s", 
+                           data.get('query'), 
+                           data.get('city'), 
+                           data.get('country'))
+                return True
+            
+            return False
+            
         except Exception as e:
-            logger.error("Failed to validate proxy: %s", e)
+            logger.error("Error validating connection: %s", e)
             return False
 
     def get_fresh_proxy_list(self, sessions: Optional[List[str]] = None) -> List[str]:
@@ -308,3 +293,75 @@ class ProxyManager:
         """
         self.used_ips.clear()
         logger.info("Cleared IP history.")
+
+    def _format_proxy_string(self, session_id: str = "") -> str:
+        """
+        Format proxy string with credentials and session.
+        
+        Args:
+            session_id (str): Optional session identifier
+            
+        Returns:
+            str: Formatted proxy string for HTTP/HTTPS proxy
+        """
+        # Your proxy format is:
+        # host:port:username:password_country-es_city-madrid_session-xxx_lifetime-1h_streaming-1
+        
+        credentials = self.proxy_credentials
+        proxy_string = (
+            f"{credentials['username']}:{credentials['password']}"
+            f"@{credentials['host']}:{credentials['port']}"
+        )
+        return proxy_string
+
+    def _load_proxy_list(self) -> List[str]:
+        """
+        Load proxy list from file.
+        
+        Returns:
+            List[str]: List of proxy strings
+        """
+        try:
+            with open(self.proxy_file_path, 'r') as f:
+                # Each line should be in format:
+                # geo.iproyal.com:12321:username:password_country-es_city-madrid_session-xxx_lifetime-1h_streaming-1
+                return [line.strip() for line in f if line.strip()]
+        except FileNotFoundError:
+            logger.error("Proxy list file not found at: %s", self.proxy_file_path)
+            return []
+
+    def _format_proxy_string(self, proxy_line: str) -> str:
+        """
+        Format proxy string from proxy list format to requests format.
+        
+        Args:
+            proxy_line (str): Raw proxy string from proxy_list.txt
+            
+        Returns:
+            str: Formatted proxy string for HTTP/HTTPS proxy
+        """
+        try:
+            # Split the proxy line into components
+            host, port, username, password_with_config = proxy_line.split(':')
+            # Format into standard proxy URL format
+            return f"{username}:{password_with_config}@{host}:{port}"
+        except ValueError as e:
+            logger.error("Invalid proxy format in line: %s", proxy_line)
+            raise ValueError(f"Invalid proxy format: {e}")
+
+    def get_current_proxies(self) -> Dict[str, str]:
+        """
+        Get the current proxy configuration in requests format.
+        
+        Returns:
+            Dict[str, str]: Dictionary with HTTP/HTTPS proxy configurations
+        """
+        if not self.current_proxy:
+            raise ValueError("No proxy currently set")
+        
+        # Explicitly format as HTTP proxy
+        proxy_url = f"http://{self.current_proxy}"
+        return {
+            'http': proxy_url,
+            'https': proxy_url
+        }
