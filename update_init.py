@@ -25,18 +25,39 @@ def get_exportable_names(file_path: Path) -> List[str]:
     """
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
-            tree = ast.parse(file.read())
+            content = file.read()
+            tree = ast.parse(content)
             
         exports = set()
         
+        # First check for dataclass imports
+        has_dataclass = False
         for node in ast.walk(tree):
-            # Get class definitions (including regular classes, dataclasses, and enums)
+            if isinstance(node, ast.ImportFrom):
+                if node.module == 'dataclasses' and any(n.name == 'dataclass' for n in node.names):
+                    has_dataclass = True
+                    break
+        
+        for node in ast.walk(tree):
+            # Get class definitions (including regular classes and enums)
             if isinstance(node, ast.ClassDef):
                 # Check if it's a class we want to export (not a private class)
                 if not node.name.startswith('_'):
-                    exports.add(node.name)
+                    # Check for dataclass decorator
+                    if has_dataclass and any(
+                        isinstance(d, ast.Name) and d.id == 'dataclass' 
+                        or (isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == 'dataclass')
+                        for d in node.decorator_list
+                    ):
+                        exports.add(node.name)
+                    # Check for Enum inheritance
+                    elif any(isinstance(base, ast.Name) and base.id == 'Enum' for base in node.bases):
+                        exports.add(node.name)
+                    # Regular class
+                    else:
+                        exports.add(node.name)
                     
-            # Get explicitly marked exports (only if they're ALL_CAPS or start with __)
+            # Get explicitly marked exports
             elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
                 if node.target.id.isupper() or node.target.id.startswith('__'):
                     exports.add(node.target.id)
@@ -44,6 +65,7 @@ def get_exportable_names(file_path: Path) -> List[str]:
         return sorted(list(exports))
     except Exception as e:
         logger.error("Error parsing %s: %s", file_path, e)
+        logger.debug("Full exception details:", exc_info=True)
         return []
 
 def get_python_files(directory: Path) -> List[Tuple[str, List[str]]]:
