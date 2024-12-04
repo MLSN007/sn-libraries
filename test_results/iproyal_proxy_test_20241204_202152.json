@@ -1,0 +1,38 @@
+{
+  "timestamp": "2024-12-04T20:21:52.282874",
+  "proxy_config": {
+    "host": "geo.iproyal.com",
+    "country": "es",
+    "city": "madrid",
+    "rotation_interval": 1500
+  },
+  "results": [
+    {
+      "name": "basic_connection",
+      "success": false,
+      "details": {
+        "error": "Failed to parse: geo.iproyal.com:12321:vSTquS4ubbeOexCX:62hHJhSPfrwmqmeV_country-es_city-madrid_session-20c20019_lifetime-1h_streaming-1"
+      },
+      "duration": 6.0131566524505615,
+      "timestamp": "2024-12-04T20:21:40.249852"
+    },
+    {
+      "name": "location_verification",
+      "success": false,
+      "details": {
+        "error": "Failed to parse: geo.iproyal.com:12321:vSTquS4ubbeOexCX:62hHJhSPfrwmqmeV_country-es_city-madrid_session-20c20019_lifetime-1h_streaming-1"
+      },
+      "duration": 3.005124092102051,
+      "timestamp": "2024-12-04T20:21:40.249852"
+    },
+    {
+      "name": "proxy_rotation",
+      "success": false,
+      "details": {
+        "error": "Failed to parse: geo.iproyal.com:12321:vSTquS4ubbeOexCX:62hHJhSPfrwmqmeV_country-es_city-madrid_session-045691e2_lifetime-1h_streaming-1"
+      },
+      "duration": 3.0085604190826416,
+      "timestamp": "2024-12-04T20:21:40.249852"
+    }
+  ]
+}

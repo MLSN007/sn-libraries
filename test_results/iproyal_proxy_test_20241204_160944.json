@@ -1,0 +1,38 @@
+{
+  "timestamp": "2024-12-04T16:09:44.282835",
+  "proxy_config": {
+    "host": "geo.iproyal.com",
+    "country": "es",
+    "city": "madrid",
+    "rotation_interval": 1500
+  },
+  "results": [
+    {
+      "name": "basic_connection",
+      "success": false,
+      "details": {
+        "error": "HTTPSConnectionPool(host='ipinfo.io', port=443): Max retries exceeded with url: /json (Caused by ProxyError('Unable to connect to proxy', SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)'))))"
+      },
+      "duration": 7.0454487800598145,
+      "timestamp": "2024-12-04T16:09:30.379657"
+    },
+    {
+      "name": "location_verification",
+      "success": false,
+      "details": {
+        "error": "HTTPConnectionPool(host='geo.iproyal.com', port=32325): Max retries exceeded with url: http://ip-api.com/json (Caused by ProxyError('Unable to connect to proxy', RemoteDisconnected('Remote end closed connection without response')))"
+      },
+      "duration": 3.3589537143707275,
+      "timestamp": "2024-12-04T16:09:30.379657"
+    },
+    {
+      "name": "proxy_rotation",
+      "success": false,
+      "details": {
+        "error": "HTTPConnectionPool(host='geo.iproyal.com', port=32325): Max retries exceeded with url: http://ip-api.com/json (Caused by ProxyError('Unable to connect to proxy', RemoteDisconnected('Remote end closed connection without response')))"
+      },
+      "duration": 3.49509596824646,
+      "timestamp": "2024-12-04T16:09:30.379657"
+    }
+  ]
+}

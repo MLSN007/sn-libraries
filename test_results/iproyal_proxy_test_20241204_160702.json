@@ -1,0 +1,38 @@
+{
+  "timestamp": "2024-12-04T16:07:02.582900",
+  "proxy_config": {
+    "host": "geo.iproyal.com",
+    "country": "es",
+    "city": "madrid",
+    "rotation_interval": 1500
+  },
+  "results": [
+    {
+      "name": "basic_connection",
+      "success": false,
+      "details": {
+        "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+      },
+      "duration": 6.7881457805633545,
+      "timestamp": "2024-12-04T16:06:49.110694"
+    },
+    {
+      "name": "location_verification",
+      "success": false,
+      "details": {
+        "error": "HTTPConnectionPool(host='geo.iproyal.com', port=32325): Max retries exceeded with url: http://ip-api.com/json (Caused by ProxyError('Unable to connect to proxy', RemoteDisconnected('Remote end closed connection without response')))"
+      },
+      "duration": 3.348989725112915,
+      "timestamp": "2024-12-04T16:06:49.110694"
+    },
+    {
+      "name": "proxy_rotation",
+      "success": false,
+      "details": {
+        "error": "HTTPConnectionPool(host='geo.iproyal.com', port=32325): Max retries exceeded with url: http://ip-api.com/json (Caused by ProxyError('Unable to connect to proxy', RemoteDisconnected('Remote end closed connection without response')))"
+      },
+      "duration": 3.3305768966674805,
+      "timestamp": "2024-12-04T16:06:49.110694"
+    }
+  ]
+}
