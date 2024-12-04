@@ -1,6 +1,5 @@
 README.md
 pyproject.toml
-setup.py
 src/gen_ai/__init__.py
 src/google_services/__init__.py
 src/google_services/google_api_types.py
